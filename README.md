@@ -1,27 +1,30 @@
 # Guardian
 
-Vigilante personal para un coche antiguo de 12 V: movimiento, batería principal, ubicación y alertas. **Situación actual: únicamente banco de software.** No existe todavía firmware ESP32, sensor conectado, app de autorización ni un circuito automotriz instalado. **No conectar este prototipo al coche.**
+Vigilante personal independiente para un coche antiguo de 12 V: movimiento, batería principal, ubicación y alertas. **Situación actual: únicamente banco de software.** No existe todavía firmware ESP32, sensor conectado, app de autorización ni un circuito automotriz instalado. **No conectar este prototipo al coche.**
 
-## Hardware elegido
+## Documentación vigente
 
-- **LILYGO T-A7670E R2 `With GPS`** (variante europea), con ESP32-WROVER-E, LTE Cat-1, GNSS y antenas del kit; no comprar `Without GPS`.
-- **DFRobot Fermion LIS2DW12 SEN0405** con pines INT1/INT2 para interrupción por movimiento. La versión Gravity SEN0409 no expone del mismo modo los pines de interrupción.
-- SIM nano de datos de particular; placa conectada por USB **solo en pruebas de escritorio**.
+**[GUARDIAN v0.5 · Diseño personal completo, componentes, batería, instalación, diagramas y pantallas](docs/GUARDIAN_DISENO_PERSONAL_v0_5.md)**. Es la referencia vigente; sustituye al documento v0.4 compartido por chat y a la anterior guía resumida `docs/GUIA_PERSONAL.md`, que queda como histórico. [Lista de compra por etapas actualizada](docs/COMPONENTES.md).
 
-[**Componentes concretos, precios orientativos, compra por etapas y enlaces**](docs/COMPONENTES.md) · [**Guía personal con diagramas eléctricos, estados, pantallas y montaje**](docs/GUIA_PERSONAL.md)
+## Hardware elegido para la primera integración USB
+
+- **LILYGO T-A7670E R2 `With GPS`**, variante europea con ESP32-WROVER-E, LTE Cat-1, GNSS y antenas del kit. Verificar que la opción pedida incluya GPS.
+- **Adafruit LIS3DH ref. 2809**, vendido por BricoGeek como SEN-0185. Sustituye al DFRobot LIS2DW12 inicialmente previsto; el firmware se desarrollará para LIS3DH y su pin de interrupción.
+- Cinco cables Dupont hembra-hembra, nano-SIM 4G, USB-C de datos y alimentación USB estable. Soldar cabeceras de los módulos cuando corresponda.
+- Batería **18650 Li-ion nominal 3,6/3,7 V** solo opcional para ensayo de reserva en interior, comprobando dimensiones y compatibilidad de la revisión de placa. No está aprobada la carga permanente en el coche sin gestión térmica y circuito automotriz cerrado.
 
 ## Ejecutar simulación local
 
-Requiere Python 3.11 o 3.13; el software de banco usa únicamente la biblioteca estándar.
+Requiere Python 3.11 o 3.13 y únicamente biblioteca estándar.
 
 ```bash
 python3 -m guardian.demo
 python3 -m unittest discover -s tests -v
 ```
 
-La demo abre HTTP **solo en 127.0.0.1**, crea una clave aleatoria temporal, transmite un evento de movimiento **simulado** firmado con HMAC-SHA256, lo guarda en SQLite y cierra el servidor. `HTTP 202` significa que el backend lo aceptó: **no** significa que haya habido sensor, modem, GPS o notificación real al teléfono. Los tests cubren firmas, contenido inválido, rechazo de repetición y una petición no autorizada.
+La demostración abre HTTP **solo en 127.0.0.1**, crea una clave aleatoria temporal, transmite un evento de movimiento **simulado** firmado con HMAC-SHA256, lo guarda en SQLite y cierra el servidor. `HTTP 202` significa que el backend aceptó el evento, **no** que hayan intervenido sensor, módem, GPS o una notificación real al teléfono. Tests: firmas, eventos malformados, rechazo de repetición y peticiones no autorizadas.
 
-Para ejecutar servidor y simulador por separado, usa una clave individual de laboratorio **fuera del repositorio**: 
+Para ejecutar servidor y simulador por separado, usa una clave de laboratorio **fuera del repositorio**:
 
 ```bash
 export GUARDIAN_DEVICE_KEY_HEX="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
@@ -32,14 +35,12 @@ python3 -m guardian.simulator --kind suspected_movement
 kill "$SERVER_PID"
 ```
 
-Servidor y simulador deben heredar exactamente la misma clave. No expongas el puerto ni reutilices el esquema HTTP local en la red móvil. La entrega opcional en Telegram requiere credenciales propias; **no se ha verificado en una cuenta real**.
+Servidor y simulador deben compartir exactamente la misma clave. No expongas HTTP local a Internet ni reutilices una clave de demo en hardware real. Telegram opcional necesita credenciales propias; no consta envío verificado a una cuenta real.
 
-## Próxima integración
+## Próximos pasos
 
-1. Encender la LILYGO por USB y ejecutar ejemplos **oficiales de esa revisión** de LTE y GNSS; no inventar pinout ni credenciales.
-2. Conectar SEN0405 a 3,3 V, I²C y un pin de interrupción adecuado tras comprobar esquema de placa; leer un movimiento real.
-3. Crear firmware con evento persistente, TLS verificado, identidad de dispositivo y envío mediante módem. **El simulador Python no se puede flashear al ESP32.**
-4. Implementar autorización BLE *intencional* y confirmada por Guardian; proximidad por sí sola nunca desarma.
-5. Diseñar y revisar alimentación +12 V protegida con fusible, supervisor físico de baja tensión y reserva térmicamente apta; medir reposo y corte **antes** de instalar en el coche.
-
-Principio: sistema independiente del coche, simple, reparable, sin OBD ni toma de mechero y sin acceso a motor, frenos, cierre o inmovilizador.
+1. Probar LILYGO GPS por USB, LTE/GNSS y bandas/APN según revisión física recibida, sin publicar IMEI o credenciales.
+2. Conectar **LIS3DH** por alimentación 3,3 V, I²C y una interrupción INT a GPIO verificado; leer movimiento real.
+3. Firmware para ESP32 que persista eventos, valide TLS, autentique el dispositivo y utilice el módem. El Python actual **no se flashea al ESP32**.
+4. Implementar autorización BLE intencional, confirmada por Guardian; proximidad nunca desarma por sí sola.
+5. Cerrar alimentación protegida desde +12 V permanente, supervisor hardware independiente y reserva apta para la temperatura prevista; comprobarlo en banco antes de montar nada en el coche. **Sin OBD ni toma de mechero.**
