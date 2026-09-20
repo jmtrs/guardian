@@ -21,8 +21,6 @@ def main():
         finally:
             server.shutdown()
             server.server_close()
-            server.RequestHandlerClass  # Explicitly close the temporary store below.
-            server.store.close() if hasattr(server, "store") else None
             thread.join()
 
 
