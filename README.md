@@ -4,7 +4,7 @@ Vigilante personal independiente para un coche antiguo de 12 V: movimiento, bate
 
 ## Documentación vigente
 
-**[GUARDIAN v0.5 · Diseño personal completo, componentes, batería, instalación, diagramas y pantallas](docs/GUARDIAN_DISENO_PERSONAL_v0_5.md)**. Es la referencia vigente; sustituye al documento v0.4 compartido por chat y a la anterior guía resumida `docs/GUIA_PERSONAL.md`, que queda como histórico. [Lista de compra por etapas actualizada](docs/COMPONENTES.md).
+**[GUARDIAN v0.5 · Diseño personal completo, componentes, batería, instalación, diagramas y pantallas](docs/GUARDIAN_DISENO_PERSONAL_v0_5.md)**. Es la referencia vigente; sustituye al documento v0.4 compartido por chat. La antigua ruta `docs/GUIA_PERSONAL.md` conduce ahora a esta versión, para evitar instrucciones incompatibles. [Lista de compra por etapas actualizada](docs/COMPONENTES.md).
 
 ## Hardware elegido para la primera integración USB
 
