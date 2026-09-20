@@ -1,39 +1,40 @@
-# Guardian · componentes y compra por etapas
+# GUARDIAN · Componentes y compra por etapas (v0.5)
 
-**Alcance:** un coche propio de 12 V; instalación fija únicamente a +12 V permanente y masa. Sin OBD, mechero, CAN ni intervención en sistemas del vehículo. **El software Python del repositorio es de banco:** no es firmware para ESP32.
+**Fuente de verdad:** [Diseño personal completo v0.5](GUARDIAN_DISENO_PERSONAL_v0_5.md). Es un proyecto personal para un coche de 12 V, sin OBD, mechero ni intervención en sistemas de conducción. **Solo está preparado el software de banco: aún no hay firmware ni montaje físico.**
 
-## Comprar ahora: prueba de sobremesa, alimentada por USB
+## Comprar ahora: banco de trabajo alimentado por USB
 
-| Cant. | Pieza concreta | Motivo y coste de referencia | Enlace |
+| Cant. | Producto concreto | Función y condiciones | Enlace |
 |---:|---|---|---|
-| 1 | **LILYGO T-A7670E R2, variante `With GPS` para Europa** | Incluye ESP32-WROVER-E, LTE Cat-1 A7670E, GNSS, BLE y antenas LTE/GPS según la ficha del kit. Precio publicado desde **US$32,89**, comprobar cuánto cuesta exactamente la opción **E con GPS** y envío/IVA. **NO comprar `Without GPS`** ni confundir A7670E con A7670SA. | [Tienda](https://lilygo.cc/products/t-sim-a7670e) · [Ficha y bandas](https://wiki.lilygo.cc/products/t-sim-series/t-a7670/) |
-| 1 | **DFRobot Fermion LIS2DW12 breakout SEN0405** | Acelerómetro I²C/SPI, alimentación lógica 3,3 V, dispone de **INT1/INT2 expuestos** para despertar el ESP32 ante movimiento. Precio fabricante **US$3,90**; el chip aislado consume menos que el breakout. Preferible al Gravity SEN0409 si necesitamos el pin de interrupción accesible. | [Producto](https://www.dfrobot.com/product-2337.html) · [Pines](https://wiki.dfrobot.com/sen0405/) |
-| 1 | SIM nano de datos **para particulares**, sin PIN o con PIN gestionado por firmware | Seleccionar operador después de recibir la placa y probar cobertura y APN. No presupuestar 1NCE como consumidor particular. | Operador de tu elección, cobertura verificada donde aparcas. |
-| 1 | Cable USB de datos + alimentación USB estable, cables Dupont y protoboard | Firmware y conectividad **sin contacto con la batería del coche**. | Reutilizar lo que ya tengas. |
+| 1 | **LILYGO T-A7670E R2 europea, variante `With GPS`** | ESP32-WROVER-E, LTE Cat-1 A7670E, BLE y GNSS. Confirmar variante E, `With GPS` y coste final con impuestos/transporte. El kit GPS anuncia antenas LTE y GPS: no comprar duplicadas. | [Tienda LILYGO](https://lilygo.cc/products/t-sim-a7670e) · [Guía y esquema](https://wiki.lilygo.cc/products/t-sim-series/t-a7670/) |
+| 1 | **Adafruit LIS3DH ref. 2809**, BricoGeek SEN-0185 | Acelerómetro I²C, 3,3 V y pin INT para despertar por movimiento. Es la **selección vigente** en lugar de DFRobot SEN0405; el firmware tendrá que usar LIS3DH. La placa puede traer tira de pines sin soldar; **no trae cables Dupont**. | [BricoGeek](https://tienda.bricogeek.com/acelerometros/1876-adafruit-lis3dh-acelerometro-3-ejes.html) · [Adafruit: conexión y pinout](https://learn.adafruit.com/adafruit-lis3dh-triple-axis-accelerometer-breakout) |
+| 1 | **Dupont hembra-hembra 20 cm**, 40 piezas | Necesitamos cinco hilos: alimentación, masa, SDA, SCL e interrupción INT. El cable STEMMA QT de cuatro hilos **no sustituye el INT**. Confirmar si la LILYGO trae cabeceras soldadas. | [BricoGeek](https://tienda.bricogeek.com/cables/1363-cables-dupont-hembra-hembra-20-cm-40-unidades.html) |
+| 1 | **Nano-SIM 4G** con datos, para particulares | Elegir operador después de comprobar bandas, cobertura y APN en tu zona. No presupuestar una oferta para empresas como compra particular. | Operador que tenga cobertura donde dejas el coche. |
+| 1 | **Cable USB-C de datos + alimentación USB 5 V estable** | Programar y alimentar la LILYGO sin conectarla al coche. Verificar corriente suficiente para picos del módem. | Reutilizar si ya lo tienes. |
+| 1 | **Soldador + multímetro** | Soldar pines del Adafruit si vienen sueltos y comprobar alimentación y ausencia de cortos. | Ya dispones de soldador; reutilizar multímetro si lo tienes. |
 
-**No comprar duplicado:** el kit `With GPS` ya anuncia antena LTE, antena GPS, cable PH2.0 y headers. La placa no incluye SIM ni celda 18650. Confirmar el contenido del paquete recibido.
+**No comprar ahora:** antenas GPS/LTE adicionales sin revisar el paquete real, protoboard si los cinco Dupont permiten unir las cabeceras con firmeza, una segunda placa GNSS, una placa de alimentación de protoboard ni accesorios OBD.
 
-**Compatibilidad:** A7670E admite LTE FDD B1/B3/B5/B8/B20 según LILYGO. No elegir pines GPIO todavía: usar esquema y pinout de **la revisión física recibida**, pues varios GPIO están ocupados por el módem. El breakout SEN0405 requiere 3,3 V y comparte GND; conectar SDA/SCL y después INT1 a un GPIO compatible con wake tras verificar el pinout.
+## Reserva para experimentar por USB (opcional, no apta automáticamente para el coche)
 
-## Segunda compra: instalación fija, después del prototipo USB
+La LILYGO anunciada incorpora alojamiento para **una 18650 Li-ion nominal de 3,6/3,7 V** y circuito de carga/protección. La celda no está incluida. Para comprobar la reserva sobre la mesa puede elegirse una celda de marca y dimensiones compatibles, por ejemplo **Samsung INR18650-30Q de 3000 mAh**, comprobando terminal, dimensiones y las indicaciones de la revisión exacta de la LILYGO antes de colocarla. [Referencia comercial en España](https://bateriasonline.com/es/baterias-litio-recargable/bateria-litio-samsung-inr-18650-30q-3000mah-samsung-baterias-litio-recargable.html).
 
-| Cant. | Subsistema | Selección y condición mínima |
-|---:|---|---|
-| 1 | Arnés reversible a **+12 V permanente** y masa correcta | Derivador compatible con la caja de fusibles de **tu coche**, fusible independiente próximo al origen, cable automotriz, funda y conectores polarizados. No conectar a circuitos de seguridad. |
-| 1 | **Entrada automotriz protegida y convertidor a la entrada admitida por LILYGO** | No sirve un buck de hobby sin más. Verificar tensiones de arranque/transitorios, protección ante inversión, cortocircuito, calor y picos de consumo del LTE; medir corriente de reposo del conjunto. La entrada 12 V **nunca** va directa a LILYGO. |
-| 1 | Supervisor de baja tensión con histéresis + corte de **solo el ramal Guardian** | Debe cortar aunque se cuelgue el ESP32, tener corriente residual muy baja y rearme estable. Los umbrales se elegirán para el vehículo y su batería. |
-| 1 | Reserva energética compatible con el circuito de carga de la placa y con la temperatura de montaje | El portaceldas LILYGO es para **18650 Li-ion 3,7 V, no LiFePO4**. No comprar una celda genérica antes de verificar química, características del cargador de la revisión recibida, protección térmica y ubicación segura. La conmutación de alimentación **puede reiniciar** la placa: persistir el aviso pendiente antes del cambio cuando sea posible y recuperarlo al arrancar. |
-| 1 | Caja y fijación no conductora, material apto para calor interior | Diseñar después de medir placa, antenas, reserva y arnés. Evitar PLA estándar para un interior expuesto al sol. |
+**No comprar para el portaceldas la batería BricoGeek con cable JST ni dar por compatible una 18650 protegida de 68–70 mm:** pueden no encajar o no tener el formato adecuado. No usar LiFePO4 en portaceldas/cargador especificado para Li-ion convencional, no soldar cables directamente a la celda y no invertir polaridad. La conmutación de fuente **puede reiniciar** LILYGO: los eventos deben persistirse y reenviarse tras reiniciar.
 
-**No hay aún referencia de tienda segura para el conjunto de potencia y reserva.** El fusible, el DC/DC y la celda no se pueden comprar responsablemente con un precio de catálogo arbitrario sin saber su circuito completo y los picos reales. El único montaje inmediato autorizado en esta guía es **USB de sobremesa**. Piezas para fabricar en serie u homologar no forman parte de esta etapa.
+La temperatura es el problema del montaje en coche: la carga de Li-ion tiene un rango permitido específico y el interior del habitáculo puede excederlo. **Una celda apta para ensayo de interior no está aprobada como reserva permanente en el vehículo** hasta verificar emplazamiento, bloqueo de carga fuera de rango y protecciones del circuito.
 
-## Presupuesto
+## Compra posterior: montaje definitivo, todavía sin referencias cerradas
 
-La placa y sensor cuestan **desde ~US$36,79 en precio base de fabricante**, pero puede ser más para la variante con GPS; quedan fuera SIM, impuestos, transporte, herramientas, arnés, alimentación automotriz y reserva. **No presentar este subtotal como precio final del dispositivo.** Comparar el presupuesto de conjunto terminado con un tracker comercial antes de encargar una PCB propia.
+| Subsistema | Condición de selección |
+|---|---|
+| Arnés de alimentación | Derivación reversible desde circuito +12 V permanente no crítico, masa adecuada, fusible propio próximo al origen, cable automotriz protegido y conectores polarizados. **Nada de OBD ni toma de mechero.** |
+| Entrada de potencia | Protección documentada contra polaridad inversa, transitorios, cortocircuito y calor; convertidor **12 V → tensión admitida por la LILYGO** capaz de soportar picos LTE y con reposo bajo. Nunca 12 V directos a la placa. |
+| Supervisor UVLO | Corte físico e independiente del ESP32 **solo del ramal Guardian**, con histéresis, corriente residual muy baja y rearme estable. |
+| Reserva final | Celda/carga/gestión de fuente como conjunto compatible con picos LTE y temperatura del emplazamiento. No asumir que el portaceldas de la placa resuelve la protección térmica de un coche. |
+| Caja | Fijación positiva y material apto para la temperatura del lugar; diseñar después de recibir y medir la electrónica real. |
 
-## Referencias técnicas
+**Presupuesto:** el precio anunciado de una pieza no equivale al coste total. Verificar variante GPS, disponibilidad, envío, IVA, SIM y después el bloque eléctrico completo; no inventar un presupuesto definitivo sin seleccionar este último.
 
-- [LILYGO T-A7670X: variantes, bandas, esquemas y arranque](https://wiki.lilygo.cc/products/t-sim-series/t-a7670/)
-- [LILYGO: contenido del kit con GPS](https://lilygo.cc/products/t-sim-a7670e)
-- [DFRobot SEN0405: pines INT1/INT2 y especificaciones](https://wiki.dfrobot.com/sen0405/)
-- [Analog Devices: alimentación de localizadores automotrices](https://www.analog.com/en/resources/app-notes/an-2083.html)
+## Primera prueba tras recibir el pedido
+
+USB sobre mesa → comprobar revisión/pines → ejecutar ejemplos oficiales LTE/GNSS → soldar pines LIS3DH → conectar 3,3 V, GND, SDA, SCL e INT a GPIO comprobado → generar un evento físico → integrarlo con transporte seguro. **El CI verde de `main` prueba únicamente el software Python simulado, no la electrónica.**
