@@ -2,6 +2,7 @@
 import argparse
 import os
 import sqlite3
+import urllib.error
 import urllib.request
 
 from .protocol import encode_event, sign
@@ -39,11 +40,14 @@ def main():
         key = bytes.fromhex(key_hex)
     except ValueError:
         raise SystemExit("Invalid key hex")
-    url = os.getenv("GUARDIAN_INGEST_URL", "http://127.0.0.1:8765/v1/events")
-    if not url.startswith("http://127.0.0.1:"):
+    url = os.getenv("GUARDIAN_INGEST_URL", "http://127.0.0.1:3000/v1/events")
+    if not url.startswith(("http://127.0.0.1:", "http://localhost:")):
         raise SystemExit("Only the local bench endpoint is supported by this simulator")
     seq = next_sequence(os.getenv("GUARDIAN_COUNTER_DB", "guardian-counter.sqlite3"))
-    status, result = send(url, os.getenv("GUARDIAN_DEVICE_ID", "guardian-lab-01"), key, args.kind, seq, args.battery_mv)
+    try:
+        status, result = send(url, os.getenv("GUARDIAN_DEVICE_ID", "guardian-lab-01"), key, args.kind, seq, args.battery_mv)
+    except urllib.error.HTTPError as exc:
+        status, result = exc.code, exc.read().decode()
     print(f"HTTP {status} seq={seq} response={result}")
 
 
