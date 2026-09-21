@@ -90,11 +90,14 @@ export function decodeEvent(body: Buffer, expectedDeviceId: string): GuardianEve
   }
   const sequence: unknown = data.sequence;
   // Number.isInteger(false) === false: cubre el caso `sequence: true` de Python.
+  // Techo 2^31 (no 2^63 como Python/SQLite): la columna Prisma es int4 y
+  // JSON.parse pierde precision sobre 2^53. Un contador que llegue a 2^31
+  // (siglos de heartbeats) indica un dispositivo roto: 400 es respuesta segura.
   if (
     typeof sequence !== 'number' ||
     !Number.isInteger(sequence) ||
     sequence < 1 ||
-    sequence >= 2 ** 63
+    sequence >= 2 ** 31
   ) {
     throw new ProtocolError('Invalid sequence');
   }

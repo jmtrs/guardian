@@ -23,10 +23,10 @@ apiClient.interceptors.request.use(async (config) => {
 // Response interceptor for handling auth errors
 apiClient.interceptors.response.use(
   (response) => response,
-  (error: AxiosError) => {
+  async (error: AxiosError) => {
     if (error.response?.status === 401) {
-      // TODO: Clear auth and redirect to login (handled by auth context)
-      console.error('Unauthorized - need to clear auth');
+      // Cookie muerta: limpiar sesion y volver al login.
+      await authClient.signOut();
     }
     return Promise.reject(error);
   }

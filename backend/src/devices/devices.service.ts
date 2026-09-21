@@ -69,7 +69,7 @@ export class DevicesService {
     return this.prisma.deviceEvent.findMany({
       where: { device: { id: deviceId, ownerId } },
       orderBy: { observedAt: 'desc' },
-      take: Math.min(limit, 200),
+      take: Math.min(Math.max(limit, 1), 200),
     });
   }
 
@@ -81,7 +81,8 @@ export class DevicesService {
   async ingest(deviceId: string, rawBody: Buffer, signature: string): Promise<IngestResult> {
     const device = await this.prisma.device.findUnique({ where: { id: deviceId } });
     if (!device) {
-      throw new NotFoundException('Unknown device');
+      // 401 uniforme como server.py: no permitir enumerar deviceIds validos.
+      throw new UnauthorizedException('Bad signature');
     }
 
     if (!verify(rawBody, Buffer.from(device.secret, 'hex'), signature)) {
@@ -132,29 +133,30 @@ export class DevicesService {
   }
 
   async startTrip(deviceId: string, userId: string) {
-    const device = await this.requireOwnedDevice(deviceId, userId);
-    if (device.state === 'TRIP') {
-      throw new ConflictException('Trip already active');
-    }
+    await this.requireOwnedDevice(deviceId, userId);
     return this.prisma.$transaction(async (tx) => {
+      // Atomico contra starts concurrentes: solo uno gana el update.
+      const advanced = await tx.device.updateMany({
+        where: { id: deviceId, state: { not: 'TRIP' } },
+        data: { state: 'TRIP' },
+      });
+      if (advanced.count === 0) {
+        throw new ConflictException('Trip already active');
+      }
       await tx.tripAuthorization.create({ data: { deviceId, startedBy: userId } });
-      return tx.device.update({ where: { id: deviceId }, data: { state: 'TRIP' } });
+      return tx.device.findUniqueOrThrow({ where: { id: deviceId } });
     });
   }
 
   async endTrip(deviceId: string, userId: string) {
     await this.requireOwnedDevice(deviceId, userId);
     return this.prisma.$transaction(async (tx) => {
-      const active = await tx.tripAuthorization.findFirst({
+      // Cierra TODOS los trips abiertos: endTrip nunca debe dejar huerfanos
+      // activos aunque hubieran varios por una condicion de carrera antigua.
+      await tx.tripAuthorization.updateMany({
         where: { deviceId, endedAt: null },
-        orderBy: { startedAt: 'desc' },
+        data: { endedAt: new Date() },
       });
-      if (active) {
-        await tx.tripAuthorization.update({
-          where: { id: active.id },
-          data: { endedAt: new Date() },
-        });
-      }
       return tx.device.update({ where: { id: deviceId }, data: { state: 'ARMED' } });
     });
   }

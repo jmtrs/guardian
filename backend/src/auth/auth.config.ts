@@ -46,6 +46,10 @@ export function createAuth(prisma: PrismaClient, baseUrl: string, secret: string
         expiresIn: 60 * 10, // 10 minutos
         allowedAttempts: 5,
         async sendVerificationOTP({ email, otp, type }) {
+          if (process.env.NODE_ENV === 'production' && !process.env.RESEND_API_KEY) {
+            // Nunca filtrar el OTP a logs de produccion sin transporte real.
+            throw new Error('Email delivery not configured: set RESEND_API_KEY');
+          }
           // Dev: codigo por consola (sin coste).
           // Produccion: TODO enviar via Resend cuando RESEND_API_KEY este listo.
           // eslint-disable-next-line no-console
