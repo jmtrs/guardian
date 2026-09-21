@@ -4,7 +4,9 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // rawBody: necesario para verificar la firma HMAC del dispositivo sobre
+  // los bytes exactos del envelope (ver IngestController).
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   app.enableCors();
   app.useGlobalPipes(

@@ -4,11 +4,26 @@ import { emailOTP } from 'better-auth/plugins';
 import type { PrismaClient } from '@prisma/client';
 
 /**
- * Tipo estructural: solo exponemos lo que usamos (el handler Web).
+ * Tipo estructural: solo exponemos lo que usamos (handler Web + api).
  * Evita TS2742 al inferir el tipo completo de betterAuth (arrastra zod interno).
  */
+export type AuthSessionUser = {
+  id: string;
+  email: string;
+  name: string;
+};
+
 export type Auth = {
   handler: (request: Request) => Promise<Response>;
+  api: {
+    getSession: (options: { headers: Headers }) => Promise<
+      | {
+          session: { id: string; userId: string; token: string };
+          user: AuthSessionUser;
+        }
+      | null
+    >;
+  };
 };
 
 export function createAuth(prisma: PrismaClient, baseUrl: string, secret: string): Auth {
@@ -35,5 +50,5 @@ export function createAuth(prisma: PrismaClient, baseUrl: string, secret: string
         },
       }),
     ],
-  });
+  }) as unknown as Auth;
 }
