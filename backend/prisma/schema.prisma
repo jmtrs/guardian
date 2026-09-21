@@ -1,0 +1,130 @@
+// Guardian schema: Better Auth tables + dominio Guardian.
+// Las tablas user/session/account/verification las genera/consume Better Auth
+// (npx @better-auth/cli generate --adapter prisma si cambia la version).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ Better Auth ============
+
+model User {
+  id            String    @id
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+  devices       Device[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([providerId, accountId])
+  @@map("accounts")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("verifications")
+}
+
+// ============ Dominio Guardian ============
+
+enum DeviceState {
+  ARMED // aparcado y armado
+  TRIP // viaje autorizado activo
+  WORKSHOP // modo taller temporal
+}
+
+model Device {
+  id         String      @id @default(cuid())
+  name       String
+  // Clave HMAC del dispositivo. Necesaria en claro para verificar firmas
+  // del envelope (protocol.py). TODO v1.x: cifrar en reposo.
+  secret     String
+  ownerId    String
+  owner      User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  state      DeviceState @default(ARMED)
+  lastSeq    Int         @default(0)
+  lastSeenAt DateTime?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  events     DeviceEvent[]
+  trips      TripAuthorization[]
+
+  @@map("devices")
+}
+
+// kinds (protocol.py ALLOWED_TYPES):
+// suspected_movement | battery_low | power_lost | heartbeat | gnss_fix
+model DeviceEvent {
+  id         String   @id @default(cuid())
+  deviceId   String
+  device     Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  seq        Int
+  kind       String
+  observedAt DateTime
+  receivedAt DateTime @default(now())
+  payload    Json?
+
+  @@unique([deviceId, seq]) // anti-replay: secuencia monotonica por dispositivo
+  @@index([deviceId, observedAt])
+  @@map("device_events")
+}
+
+model TripAuthorization {
+  id        String    @id @default(cuid())
+  deviceId  String
+  device    Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  startedBy String
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+
+  @@index([deviceId, startedAt])
+  @@map("trip_authorizations")
+}
