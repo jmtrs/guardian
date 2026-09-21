@@ -1,6 +1,7 @@
 import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { emailOTP } from 'better-auth/plugins';
+import { expo } from '@better-auth/expo';
 import type { PrismaClient } from '@prisma/client';
 
 /**
@@ -38,6 +39,8 @@ export function createAuth(prisma: PrismaClient, baseUrl: string, secret: string
       enabled: false,
     },
     plugins: [
+      // Marca el scheme guardian:// como origen de confianza para la app Expo.
+      expo(),
       emailOTP({
         otpLength: 6,
         expiresIn: 60 * 10, // 10 minutos
