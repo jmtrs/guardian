@@ -70,7 +70,9 @@ export class DevicesController {
 
   @Get(':id/events')
   events(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Query('limit') limit?: string) {
-    return this.devices.listEvents(id, req.user!.id, limit ? Number(limit) : undefined);
+    const parsed = limit !== undefined ? Number(limit) : NaN;
+    const safeLimit = Number.isFinite(parsed) ? Math.trunc(parsed) : 50;
+    return this.devices.listEvents(id, req.user!.id, safeLimit);
   }
 
   @Post(':id/trip/start')

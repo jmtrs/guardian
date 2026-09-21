@@ -27,9 +27,9 @@ export class AuthController {
     let body: string | undefined;
     if (req.body !== undefined && Object.keys(req.body).length > 0) {
       body = JSON.stringify(req.body);
-      if (!headers.has('content-type')) {
-        headers.set('content-type', 'application/json');
-      }
+      // Incondicional: el body ya esta re-serializado como JSON aunque el
+      // cliente viniera con urlencoded/multipart.
+      headers.set('content-type', 'application/json');
     }
 
     const webRequest = new Request(url, {
@@ -41,11 +41,22 @@ export class AuthController {
     const response = await this.auth.handler(webRequest);
 
     res.status(response.status);
+    // Set-Cookie puede venir repetido (set + clear en la misma respuesta):
+    // forEach colapsaria multi-headers, asi que se añaden aparte.
     response.headers.forEach((value, key) => {
-      if (key !== 'content-encoding' && key !== 'transfer-encoding') {
+      if (
+        key !== 'content-encoding' &&
+        key !== 'transfer-encoding' &&
+        key !== 'set-cookie'
+      ) {
         res.setHeader(key, value);
       }
     });
+    const setCookie =
+      typeof response.headers.getSetCookie === 'function'
+        ? response.headers.getSetCookie()
+        : [];
+    setCookie.forEach((cookie) => res.append('Set-Cookie', cookie));
     const responseBody = await response.text();
     res.send(responseBody === '' ? undefined : responseBody);
   }

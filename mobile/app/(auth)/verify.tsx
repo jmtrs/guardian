@@ -41,6 +41,9 @@ export default function VerifyScreen() {
       setCode('');
       return;
     }
+    // Esperar a que expoClient persista la cookie en SecureStore antes de
+    // navegar: el guard de (home) redirige a login si la sesion no se ve.
+    await authClient.getCookie();
     router.replace('/(home)');
   };
 
