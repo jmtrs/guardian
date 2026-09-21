@@ -89,7 +89,7 @@ export function OtpVerifyForm({
         onPress={onVerify}
         disabled={isLoading}
       >
-        <Text style={styles.buttonText}>{isLoading ? t('phone.verifying') : verifyLabel}</Text>
+        <Text style={styles.buttonText}>{isLoading ? t('auth.verifying') : verifyLabel}</Text>
       </Pressable>
 
       <Pressable

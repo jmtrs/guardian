@@ -4,6 +4,7 @@ export const es = {
     error: 'Error',
     retry: 'Reintentar',
     cancel: 'Cancelar',
+    back: 'Volver',
   },
   auth: {
     loginTitle: 'Guardian',
@@ -11,11 +12,13 @@ export const es = {
     emailLabel: 'Email',
     emailPlaceholder: 'tu@email.com',
     sendCode: 'Enviar código',
+    sendingCode: 'Enviando...',
     resendCode: 'Reenviar código',
     verifying: 'Verificando...',
     verifyTitle: 'Introduce el código',
     verifySubtitle: 'Te hemos enviado un código de 6 dígitos',
     invalidCode: 'Código incorrecto',
+    invalidEmail: 'Email no valido',
     logout: 'Cerrar sesión',
   },
   home: {
@@ -26,7 +29,19 @@ export const es = {
     startTrip: 'Iniciar viaje',
     endTrip: 'Finalizar viaje',
     events: 'Eventos recientes',
+    eventsTitle: 'Historial',
     noEvents: 'Sin eventos',
+    noDevice: 'Sin dispositivos. Usa el simulador de banco para dar de alta uno.',
+    lastSeen: 'Ultimo contacto',
+    lastSeenNever: 'Nunca',
+    battery: 'Bateria',
+  },
+  events: {
+    kindSuspectedMovement: 'Movimiento sospechoso',
+    kindBatteryLow: 'Bateria baja',
+    kindPowerLost: 'Alimentacion cortada',
+    kindHeartbeat: 'Latido',
+    kindGnssFix: 'Posicion GNSS',
   },
 };
 

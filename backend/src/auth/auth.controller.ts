@@ -13,7 +13,8 @@ import type { Auth } from './auth.config';
 export class AuthController {
   constructor(@Inject(AUTH_INSTANCE) private readonly auth: Auth) {}
 
-  @All('*path')
+  // '*' a secas: '*path' no cubre rutas multi-segmento con path-to-regexp 0.1.x.
+  @All('*')
   async handle(@Req() req: Request, @Res() res: Response): Promise<void> {
     const url = `http://${req.get('host') ?? 'localhost'}${req.originalUrl}`;
     const headers = new Headers();
