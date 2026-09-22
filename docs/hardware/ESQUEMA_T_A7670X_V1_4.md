@@ -20,6 +20,6 @@ La página 4 **no muestra un GPIO del ESP32 que controle directamente una entrad
 
 - Que el diseño de carga o el montaje de una **T-A7670E R2 comprada hoy** coincidan punto por punto con esta V1.4. Comprobar foto legible de ambas caras, referencia del cargador, puente `N9`, continuidad de `TEMP` y cualquier esquema actualizado del fabricante.
 - Que sea seguro retirar `N9` y soldar una NTC sin calcular la red, sus fallos y los umbrales concretos de la celda.
-- Que el CN3065 tenga ya una desconexión térmica funcional de origen, que la reserva sea apta para calor de coche, o que el reinicio en conmutación esté eliminado.
+- Que el CN3065 tenga ya una desconexión térmica funcional de origen, que la reserva sea apta para calor de vehiculo, o que el reinicio en conmutación esté eliminado.
 
 **Decisión de proyecto y criterios de instalación:** [ALIMENTACION_Y_RESERVA.md](ALIMENTACION_Y_RESERVA.md). Si se requiere una copia del PDF dentro de Guardian, debe incorporarse desde un entorno Git capaz de subir binarios y conservarse esta URL de procedencia; no renombrar este fichero Markdown como `.pdf`.
