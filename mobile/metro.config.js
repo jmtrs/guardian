@@ -16,8 +16,7 @@ config.resolver.nodeModulesPaths = [
   path.resolve(workspaceRoot, 'node_modules'),
 ];
 
-// Force resolving symlinks for pnpm
-config.resolver.disableHierarchicalLookup = true;
+// (pnpm: symlinks ya los resuelve Metro por defecto en SDK 57)
 
 // Enable package exports to resolve subpath exports (e.g., semver/functions/satisfies)
 config.resolver.unstable_enablePackageExports = true;

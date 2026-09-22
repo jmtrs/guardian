@@ -2,16 +2,13 @@ import React from 'react';
 import { Platform, Pressable, Text, TextInput, View } from 'react-native';
 import type { TFunction } from 'i18next';
 
+import { HUDButton } from '@/ui/composites/HUDButton';
 import type { UITheme } from '@/ui/theme';
 
 type OtpVerifyFormStyles = {
   form: object;
   label: object;
   input: object;
-  button: object;
-  buttonPressed: object;
-  buttonDisabled: object;
-  buttonText: object;
   resendButton: object;
   resendButtonDisabled: object;
   resendButtonText: object;
@@ -66,6 +63,8 @@ export function OtpVerifyForm({
         onChangeText={onCodeChange}
         placeholder={placeholder}
         placeholderTextColor={theme.semantic.fg.muted}
+        cursorColor={theme.semantic.accent.warning}
+        selectionColor={theme.semantic.accent.warning}
         keyboardType="number-pad"
         maxLength={6}
         autoCapitalize="none"
@@ -80,17 +79,11 @@ export function OtpVerifyForm({
       />
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-      <Pressable
-        style={({ pressed }) => [
-          styles.button,
-          pressed && styles.buttonPressed,
-          isLoading && styles.buttonDisabled,
-        ]}
+      <HUDButton
+        label={isLoading ? t('auth.verifying') : verifyLabel}
         onPress={onVerify}
-        disabled={isLoading}
-      >
-        <Text style={styles.buttonText}>{isLoading ? t('auth.verifying') : verifyLabel}</Text>
-      </Pressable>
+        loading={isLoading}
+      />
 
       <Pressable
         style={[styles.resendButton, resendDisabled && styles.resendButtonDisabled]}

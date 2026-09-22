@@ -2,6 +2,8 @@ import type { TypographyWeight } from '@/ui/foundations';
 import { coreTokens } from '@/ui/foundations';
 
 import { uiFontFamily } from './fonts';
+import type { AccentPalette } from './palette';
+import { DEFAULT_ACCENT, derivePalette, withAlpha } from './palette';
 
 export type SemanticTheme = {
   bg: {
@@ -10,6 +12,7 @@ export type SemanticTheme = {
     surfaceRaised: string;
     inset: string;
     hudPanel: string;
+    bezel: string;
   };
   surface: {
     carbon: string;
@@ -26,6 +29,7 @@ export type SemanticTheme = {
   accent: {
     warning: string;
     dirtyAmber: string;
+    glow: string;
     red: string;
   };
   border: {
@@ -46,6 +50,14 @@ export type SemanticTheme = {
     error: string;
     selected: string;
     focusRing: string;
+  };
+  // Baked rgba glow tints — RN can't read CSS vars, so we precompute the alpha
+  // literals autobahn writes inline (text-shadow / inset glows).
+  glow: {
+    text: string; // amber text-shadow
+    textStrong: string;
+    panel: string; // inset panel glow
+    grid: string; // scanline grid line color
   };
 };
 
@@ -68,64 +80,90 @@ export type UITheme = {
   };
 };
 
-export const semanticDarkTheme: SemanticTheme = {
-  bg: {
-    canvas: coreTokens.color['black.1000'],
-    surface: coreTokens.color['carbon.900'],
-    surfaceRaised: coreTokens.color['carbon.850'],
-    inset: coreTokens.color['carbon.950'],
-    hudPanel: coreTokens.color['carbon.900'],
-  },
-  surface: {
-    carbon: coreTokens.color['carbon.950'],
-    panel: coreTokens.color['carbon.900'],
-    raised: coreTokens.color['carbon.850'],
-    cutout: coreTokens.color['smoke.050'],
-  },
-  fg: {
-    primary: coreTokens.color['smoke.050'],
-    secondary: coreTokens.color['smoke.100'],
-    muted: coreTokens.color['smoke.300'],
-    inverse: coreTokens.color['black.1000'],
-  },
-  accent: {
-    warning: coreTokens.color['warningYellow.500'],
-    dirtyAmber: coreTokens.color['dirtyAmber.500'],
-    red: coreTokens.color['dangerRed.500'],
-  },
-  border: {
-    subtle: coreTokens.color['steel.700'],
-    strong: coreTokens.color['smoke.300'],
-    warning: coreTokens.color['warningYellow.500'],
-    metal: coreTokens.color['steel.500'],
-    danger: coreTokens.color['dangerRed.500'],
-  },
-  map: {
-    road: coreTokens.color['map.road'],
-    grid: coreTokens.color['map.grid'],
-    route: coreTokens.color['map.route'],
-    marker: coreTokens.color['map.marker'],
-  },
-  state: {
-    disabled: coreTokens.color['steel.700'],
-    error: coreTokens.color['dangerRed.500'],
-    selected: coreTokens.color['warningYellow.500'],
-    focusRing: coreTokens.color['warningYellow.400'],
-  },
-};
+// Neutral foreground (readout text) stays smoke-colored across themes — only
+// accents, glows, bg and borders retint. Matches autobahn keeping digits light
+// against the amber glass, not tinting the type itself.
+function buildSemanticTheme(p: AccentPalette): SemanticTheme {
+  return {
+    bg: {
+      // Pure black canvas — AMOLED pixels stay off across the whole backdrop.
+      // Panels/insets keep the faint accent tint for depth (small lit area).
+      canvas: '#000000',
+      surface: p.surface,
+      surfaceRaised: p.surfaceRaised,
+      inset: p.inset,
+      hudPanel: p.surface,
+      bezel: p.bezel,
+    },
+    surface: {
+      carbon: p.inset,
+      panel: p.surface,
+      raised: p.surfaceRaised,
+      cutout: coreTokens.color['smoke.050'],
+    },
+    fg: {
+      // Text follows the accent (like autobahn's all-amber readouts) instead of
+      // neutral white — brightest tone for primary, accent for secondary, dim
+      // for muted. Keeps the whole UI on the chosen palette.
+      primary: p.accentGlow,
+      secondary: p.accent,
+      muted: p.accentMuted,
+      inverse: '#000000',
+    },
+    accent: {
+      warning: p.accent,
+      dirtyAmber: p.accentDim,
+      glow: p.accentGlow,
+      red: coreTokens.color['dangerRed.500'],
+    },
+    border: {
+      subtle: withAlpha(p.accent, 0.14),
+      strong: p.border,
+      warning: p.accent,
+      metal: withAlpha(p.accent, 0.28),
+      danger: coreTokens.color['dangerRed.500'],
+    },
+    map: {
+      road: coreTokens.color['map.road'],
+      grid: coreTokens.color['map.grid'],
+      route: p.accentDim,
+      marker: p.accent,
+    },
+    state: {
+      disabled: withAlpha(p.accent, 0.18),
+      error: coreTokens.color['dangerRed.500'],
+      selected: p.accent,
+      focusRing: p.accentGlow,
+    },
+    glow: {
+      text: withAlpha(p.accent, 0.5),
+      textStrong: withAlpha(p.accentGlow, 0.9),
+      panel: withAlpha(p.accent, 0.08),
+      grid: withAlpha(p.accent, 0.06),
+    },
+  };
+}
 
-export const darkTheme: UITheme = {
-  name: 'dark',
-  tokens: coreTokens,
-  semantic: semanticDarkTheme,
-  fontFamily: uiFontFamily,
-  elevation: {
-    flat: coreTokens.shadow.none,
-    raised: coreTokens.shadow.md,
-    overlay: coreTokens.shadow.lg,
-  },
-  ornament: {
-    maxTextureLayers: 2,
-    maxOverlayLayers: 1,
-  },
-};
+export function buildTheme(accentHex: string): UITheme {
+  return {
+    name: 'dark',
+    tokens: coreTokens,
+    semantic: buildSemanticTheme(derivePalette(accentHex)),
+    fontFamily: uiFontFamily,
+    elevation: {
+      flat: coreTokens.shadow.none,
+      raised: coreTokens.shadow.md,
+      overlay: coreTokens.shadow.lg,
+    },
+    ornament: {
+      maxTextureLayers: 2,
+      maxOverlayLayers: 1,
+    },
+  };
+}
+
+export const semanticDarkTheme: SemanticTheme = buildSemanticTheme(
+  derivePalette(DEFAULT_ACCENT),
+);
+
+export const darkTheme: UITheme = buildTheme(DEFAULT_ACCENT);

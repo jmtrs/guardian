@@ -92,6 +92,12 @@ model Device {
   state      DeviceState @default(ARMED)
   lastSeq    Int         @default(0)
   lastSeenAt DateTime?
+  // Ultimo estado denormalizado: evita escanear device_events para la
+  // "ultima posicion/bateria conocida" (dashboard + preview de mapa).
+  lastLat       Float?
+  lastLon       Float?
+  lastFixAt     DateTime?
+  lastBatteryMv Int?
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
   events     DeviceEvent[]

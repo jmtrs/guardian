@@ -1,26 +1,30 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { Animated } from 'react-native';
 
-export const BTN_W = 132;
-export const BTN_H = 26;
+export const BTN_H = 46;
 export const WRAP_PAD = 8;
 
 // Minimum time the pressed state stays visible — guarantees a quick tap still shows the animation.
 const MIN_PRESS_MS = 320;
 
-export function useHUDButtonAnim() {
+export function useHUDButtonAnim(enabled: boolean) {
   const layoutAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const scanAnim = useRef(new Animated.Value(-BTN_W)).current;
+  const scanAnim = useRef(new Animated.Value(0)).current;
   const pressInAt = useRef(0);
   const releaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Clear any pending release timer on unmount
-  useEffect(() => () => {
-    if (releaseTimer.current) clearTimeout(releaseTimer.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (releaseTimer.current) clearTimeout(releaseTimer.current);
+    },
+    [],
+  );
 
   const onPressIn = useCallback(() => {
+    if (!enabled) return;
+
     if (releaseTimer.current) {
       clearTimeout(releaseTimer.current);
       releaseTimer.current = null;
@@ -33,7 +37,7 @@ export function useHUDButtonAnim() {
     scaleAnim.stopAnimation();
     scaleAnim.setValue(1);
     scanAnim.stopAnimation();
-    scanAnim.setValue(-BTN_W);
+    scanAnim.setValue(0);
 
     Animated.parallel([
       Animated.spring(layoutAnim, {
@@ -48,15 +52,18 @@ export function useHUDButtonAnim() {
         Animated.timing(scaleAnim, { toValue: 1.02, duration: 80, useNativeDriver: true }),
         Animated.timing(scaleAnim, { toValue: 1, duration: 60, useNativeDriver: true }),
       ]),
+      // 0 → 1; the component maps it onto the measured width
       Animated.timing(scanAnim, {
-        toValue: BTN_W + 60,
+        toValue: 1,
         duration: 200,
         useNativeDriver: true,
       }),
     ]).start();
-  }, [layoutAnim, scaleAnim, scanAnim]);
+  }, [enabled, layoutAnim, scaleAnim, scanAnim]);
 
   const onPressOut = useCallback(() => {
+    if (!enabled) return;
+
     const elapsed = Date.now() - pressInAt.current;
     const delay = Math.max(0, MIN_PRESS_MS - elapsed);
     releaseTimer.current = setTimeout(() => {
@@ -68,7 +75,7 @@ export function useHUDButtonAnim() {
         friction: 20,
       }).start();
     }, delay);
-  }, [layoutAnim]);
+  }, [enabled, layoutAnim]);
 
   return { layoutAnim, scaleAnim, scanAnim, onPressIn, onPressOut };
 }
