@@ -1,6 +1,8 @@
 # GUARDIAN
 ## Guía de construcción personal v0.5 · diseño, componentes, arquitectura y pruebas
 
+> **Documento histórico.** La arquitectura de integración vigente está en [GUARDIAN v0.6](GUARDIAN_INTEGRACION_APP_DISPOSITIVO_v0_6.md) y la lista de componentes vigente en [COMPONENTES.md](COMPONENTES.md). Conservar v0.5 como referencia del diseño funcional original; **no usar su tabla de compra ni sus descripciones de “app futura” como fuente de verdad actual**.
+
 **Fecha:** 20 de septiembre de 2026  
 **Propósito:** un vigilante autónomo para un coche personal antiguo de 12 V, sin objetivo de comercialización por ahora.  
 **Estado:** especificación actualizada; el código Python del repositorio solo simula eventos y prueba un receptor local. No hay firmware cargado ni pruebas de LTE/GNSS/acelerómetro en la LILYGO. Este documento sustituye la guía v0.4 entregada fuera del repositorio; se han corregido su antigua selección Waveshare y el acelerómetro inicialmente previsto.
