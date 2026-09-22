@@ -57,8 +57,8 @@ export const en: Translation = {
     battery: 'Power',
     powerVehicle: 'vehicle',
     powerReserve: 'reserve',
-    lastFix: 'Last fix',
     locate: 'Update location',
+    locateWithFix: 'Update · {{time}}',
     locateWaiting: 'Waiting for fix...',
     locateUpdated: 'Updated {{time}}',
     locateExpired: 'No response - retry',
@@ -82,6 +82,7 @@ export const en: Translation = {
     noPositionTitle: 'No position',
     noPositionHint: 'The device has not reported a GNSS position yet.',
     trailFromAlert: 'Trail since alert',
+    trailFromTrip: 'Trip trail',
   },
   events: {
     kindSuspectedMovement: 'Suspected movement',

@@ -110,7 +110,9 @@ export function DashboardScreen() {
         ? t('home.locateUpdated', { time: formatEventTime(latestLocate.ackedAt) })
         : latestLocate?.status === 'EXPIRED'
           ? t('home.locateExpired')
-          : t('home.locate');
+          : device?.lastFixAt
+            ? t('home.locateWithFix', { time: formatEventTime(device.lastFixAt) })
+            : t('home.locate');
 
   // La ALERTA es un incidente persistente, NO el ultimo evento: un heartbeat
   // posterior ya no la oculta y power_lost la enciende. Prioridad por estado,
@@ -179,9 +181,10 @@ export function DashboardScreen() {
           </View>
           <View style={styles.mapBody}>
             {/* Sin label "Ubicacion del vehiculo": la direccion ES la tarjeta.
-                Valor protagonista, detalle debajo, y la ultima posicion comparte
-                fila con el pedido de fix para no apilar lineas. */}
-            <Text style={styles.mapValue} numberOfLines={1}>
+                Valor protagonista (hasta 2 lineas), detalle debajo, y un pie
+                separado por linea divisoria: fix y boton cada uno en su linea,
+                sin repartirse una fila estrecha. */}
+            <Text style={styles.mapValue} numberOfLines={2}>
               {placeText}
             </Text>
             {hasPosition && geo?.detail ? (
@@ -189,14 +192,7 @@ export function DashboardScreen() {
                 {geo.detail}
               </Text>
             ) : null}
-            <View style={styles.mapFooterRow}>
-              {device.lastFixAt ? (
-                <Text style={styles.mapDetail} numberOfLines={1} ellipsizeMode="tail">
-                  {t('home.lastFix')}: {formatEventTime(device.lastFixAt)}
-                </Text>
-              ) : (
-                <View />
-              )}
+            <View style={styles.mapFooter}>
               {/* Pedir fix ahora. El estado es del ULTIMO comando: PENDING espera
                   el fix real; EXPIRED avisa; ACKED enseña cuando llego. Sin falsos
                   "ubicado" — el ACK lo da el dispositivo, no el boton. */}
@@ -371,15 +367,20 @@ export function DashboardScreen() {
   }
 
   // Tap en Ubicacion navega; long-press en cualquier card arrastra para reordenar.
-  // Con ALERTA abierta el mapa llega acotado al incidente: el rastro cuenta
-  // desde que salto la alerta, no los ultimos 100 puntos mezclados.
+  // El mapa llega acotado al hecho vigente: ALERTA abierta -> rastro desde el
+  // incidente; VIAJE activo -> rastro del viaje; si no, historial completo. La
+  // alerta manda sobre el viaje (un movimiento durante un viaje sigue siendo lo
+  // urgente que mirar). El backend rechaza ids ajenos, asi que es seguro.
+  const activeTripId = device?.trips?.[0]?.id;
   const onCardPress = (key: DashboardCard) => {
     if (key === 'location') {
-      router.push(
+      const params =
         isOpenAlert && activeIncident
-          ? { pathname: '/(home)/map', params: { incidentId: activeIncident.id } }
-          : '/(home)/map',
-      );
+          ? { incidentId: activeIncident.id }
+          : isTrip && activeTripId
+            ? { tripId: activeTripId }
+            : undefined;
+      router.push(params ? { pathname: '/(home)/map', params } : '/(home)/map');
     }
   };
 

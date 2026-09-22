@@ -25,11 +25,18 @@ export function MapScreen() {
 
   const { data: devices } = useDevices({ refetchInterval: 10_000 });
   const device = devices?.[0];
-  // Rastro acotado: con ?incidentId=... el backend devuelve posiciones desde
-  // que abrio el incidente (el dashboard navega asi con alerta abierta). Sin
-  // params, historial completo.
-  const { incidentId } = useLocalSearchParams<{ incidentId?: string }>();
-  const scope = incidentId ? { incidentId } : undefined;
+  // Rastro acotado por un hecho concreto, nunca "los ultimos 100 puntos
+  // mezclados": con ?incidentId=... el backend devuelve posiciones desde que
+  // abrio el incidente; con ?tripId=... las del viaje (entre start/end). El
+  // dashboard navega con incidente si hay alerta abierta, si no con el viaje
+  // activo. Sin params, historial completo. incidentId manda sobre tripId.
+  const { incidentId, tripId } = useLocalSearchParams<{ incidentId?: string; tripId?: string }>();
+  const scope = incidentId ? { incidentId } : tripId ? { tripId } : undefined;
+  const scopeSubtitle = incidentId
+    ? t('map.trailFromAlert')
+    : tripId
+      ? t('map.trailFromTrip')
+      : null;
   const { data: positions } = useDevicePositions(device?.id, 100, { refetchInterval: 10_000 }, scope);
   // Tapa oscura hasta que el estilo carga: evita el flash blanco de MapLibre.
   const [mapReady, setMapReady] = useState(false);
@@ -56,7 +63,7 @@ export function MapScreen() {
   const header = (
     <View style={styles.headerBlock}>
       <Text style={styles.title}>{t('map.title')}</Text>
-      {incidentId ? <Text style={styles.subtitle}>{t('map.trailFromAlert')}</Text> : null}
+      {scopeSubtitle ? <Text style={styles.subtitle}>{scopeSubtitle}</Text> : null}
     </View>
   );
 

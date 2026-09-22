@@ -218,40 +218,35 @@ export function createStyles(theme: UITheme) {
     },
     mapBody: {
       flex: 1,
-      gap: tokens.spacing['1'],
+      gap: tokens.spacing['2'],
     },
-    // Sin label: la direccion es el titular de la tarjeta.
+    // Sin label: la direccion es el titular de la tarjeta (hasta 2 lineas).
     mapValue: {
       color: semantic.fg.primary,
       fontFamily: fontFamily.ui.regular,
-      fontSize: 14,
+      fontSize: 15,
     },
     mapDetail: {
       color: semantic.fg.muted,
       fontFamily: fontFamily.ui.regular,
-      fontSize: 11,
-      letterSpacing: 0.5,
-      // En la fila footer cede sitio al boton de fix si la pantalla es estrecha.
-      flexShrink: 1,
+      fontSize: 12,
+      letterSpacing: 0.3,
     },
     mapArrow: {
       color: semantic.accent.warning,
       fontFamily: fontFamily.ui.medium,
       fontSize: 16,
     },
-    // Ultima posicion + "Actualizar ubicacion" comparten fila: la tarjeta no
-    // apila lineas sueltas. El boton pide un LOCATE_NOW real — es una accion.
-    mapFooterRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: tokens.spacing['3'],
-      marginTop: tokens.spacing['1'],
+    // Pie de la tarjeta: solo el boton, separado del contenido por aire. El
+    // boton pide un LOCATE_NOW real — es una accion, quiere aire y tap area.
+    // El fix va horneado en el label ("UBICADO 18:03"), sin linea aparte.
+    mapFooter: {
+      marginTop: tokens.spacing['2'],
     },
     locateRow: {
-      flexShrink: 1,
-      paddingHorizontal: tokens.spacing['3'],
-      paddingVertical: tokens.spacing['1'],
+      alignSelf: 'flex-start',
+      paddingHorizontal: tokens.spacing['4'],
+      paddingVertical: tokens.spacing['2'],
       borderWidth: 1,
       borderColor: semantic.border.metal,
       backgroundColor: semantic.bg.inset,
@@ -259,7 +254,7 @@ export function createStyles(theme: UITheme) {
     locateText: {
       color: semantic.accent.warning,
       fontFamily: fontFamily.ui.medium,
-      fontSize: 11,
+      fontSize: 12,
       letterSpacing: 2,
       textTransform: 'uppercase',
     },

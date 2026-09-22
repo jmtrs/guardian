@@ -5,7 +5,7 @@
 **Estado:** arquitectura de integración y plan de validación. La app y el backend existen; el firmware físico, el enlace LTE/GNSS real, la autorización BLE y la alimentación automotriz siguen pendientes de banco.  
 **Ámbito:** proyecto personal para un vehículo de 12 V. Guardian no controla motor, arranque, dirección, frenos, inmovilizador, CAN ni centralitas.
 
-> Principio rector: Guardian nunca debe comprometer la batería de arranque para mantener una función de comodidad. La detección de movimiento y la protección del coche son prioritarias; el wake remoto inmediato solo se habilita si demuestra un consumo compatible con el presupuesto energético real.
+> Principio rector: Guardian nunca debe comprometer la batería de arranque para mantener una función de comodidad. La detección de movimiento y la protección del vehiculo son prioritarias; el wake remoto inmediato solo se habilita si demuestra un consumo compatible con el presupuesto energético real.
 
 ---
 
@@ -29,7 +29,7 @@ En `mobile/` existe una app Expo con:
 - historial de eventos;
 - tema configurable, idioma ES/EN y logout.
 
-La app consulta el backend cada 5-10 s cuando las pantallas están abiertas. **Ese polling es app -> backend y debe seguir leyendo únicamente estado ya almacenado en servidor; no debe generar comandos ni despertar el coche.**
+La app consulta el backend cada 5-10 s cuando las pantallas están abiertas. **Ese polling es app -> backend y debe seguir leyendo únicamente estado ya almacenado en servidor; no debe generar comandos ni despertar el vehiculo.**
 
 ### Backend actual
 
@@ -60,11 +60,16 @@ El banco Python continúa siendo útil como implementación de referencia y simu
 
 ### Huecos encontrados que v0.6 debe resolver
 
-1. **El estado de viaje actual es solo servidor.**  
-   `POST /v1/devices/:id/trip/start` cambia `Device.state` a `TRIP` y la app hace update optimista. El dispositivo físico no confirma nada. Esto contradice la regla previa de que Guardian debe confirmar un cambio de seguridad.
+> Estado a septiembre de 2026: los huecos 2, 7, 9 y 10 están resueltos e implementados
+> (PR1 + PR2); el resto siguen abiertos. El contrato vigente entre placa, backend y app
+> es `docs/CONTRATO_DISPOSITIVO_v0_6.md`. Visión de las cinco capas y recorrido de un dato
+> de punta a punta: `docs/MAPA_CONEXION_SISTEMA.md`.
 
-2. **No existe canal backend -> dispositivo.**  
-   Hay telemetría del dispositivo hacia el backend, pero aún no hay cola de comandos, ACK, expiración ni `LOCATE_NOW`.
+1. **El estado de viaje actual es solo servidor.**  
+   `POST /v1/devices/:id/trip/start` cambia `Device.state` a `TRIP` y la app hace update optimista. El dispositivo físico no confirma nada. Esto contradice la regla previa de que Guardian debe confirmar un cambio de seguridad. *(Parcialmente mitigado: iniciar viaje cierra los incidentes de movimiento abiertos — presencia del dueño —, pero el viaje sigue sin confirmación del dispositivo.)*
+
+2. ~~**No existe canal backend -> dispositivo.**~~ **Resuelto (PR2).**  
+   Cola de comandos `LOCATE_NOW` con TTL 120 s, poll firmado con K_command, ACK atómico desde `gnss_fix.commandId`, expiración perezosa. Contrato: `docs/CONTRATO_DISPOSITIVO_v0_6.md` §6.
 
 3. **No existe wake remoto validado.**  
    La T-A7670E dispone de señales de módem útiles para sleep/wake, pero el método exacto, consumo y comportamiento con nuestra revisión y ruta de alimentación deben medirse.
@@ -78,16 +83,17 @@ El banco Python continúa siendo útil como implementación de referencia y simu
 6. **La ubicación exacta sale a terceros en la app actual.**  
    Nominatim recibe lat/lon para reverse-geocode. Google Maps/Waze reciben las coordenadas cuando el usuario pulsa sus botones. Debe ser una decisión explícita de privacidad.
 
-7. **La alerta actual no tiene estado propio.**  
-   El dashboard solo considera alerta si el dispositivo está `ARMED` y el evento más reciente es `suspected_movement`. Un `heartbeat` posterior puede hacer desaparecer visualmente la alerta, y `power_lost` no activa hoy el estado rojo del dashboard. Debe existir un incidente persistente independiente del último evento.
+7. ~~**La alerta actual no tiene estado propio.**~~ **Resuelto (PR1).**  
+   Incidente persistente (`OPEN` → `ACKNOWLEDGED` → `CLOSED`) independiente del último evento. `power_lost` abre incidente propio; un `heartbeat` posterior no lo oculta. Ningún incidente `OPEN` se cierra por telemetría; un `power_lost` revisado se cierra al observar energía de vehiculo restablecida (`closedByEventSeq`).
 
 8. **`WORKSHOP` existe en backend pero la app no lo representa correctamente.**  
-   La lógica actual termina mostrando cualquier estado que no sea `TRIP` como `ARMADO`. No se habilitará modo taller real hasta diseñar expiración y confirmación en dispositivo.
+   La lógica actual termina mostrando cualquier estado que no sea `TRIP` como `ARMADO`. No se habilitará modo taller real hasta diseñar expiración y confirmación en dispositivo. *(La app ya pinta TALLER con cuenta atrás; falta la confirmación en dispositivo.)*
 
-9. **El rastro actual son las últimas posiciones, no necesariamente un viaje o incidente concreto.**
+9. ~~**El rastro actual son las últimas posiciones, no necesariamente un viaje o incidente concreto.**~~ **Resuelto (PR2).**  
+   `GET /v1/devices/:id/positions` acota el rastro por hecho concreto: `?incidentId=...` desde que abrió el incidente (cota por `openedByEventSeq`), `?tripId=...` entre `startedAt`/`endedAt` del viaje. El dashboard navega al mapa acotado: incidente si hay alerta abierta, viaje si hay viaje activo, historial completo si no. La alerta manda sobre el viaje.
 
-10. **La telemetría de batería es ambigua.**  
-    El protocolo actual solo tiene `batteryMv`, pero el producto necesita distinguir como mínimo tensión de batería del coche, tensión/estado de reserva y fuente activa. No debe mostrarse un único campo “Batería” sin semántica física definida.
+10. ~~**La telemetría de batería es ambigua.**~~ **Resuelto (PR2).**  
+    Protocolo v2: `power {vehicleMv, reserveMv?, source}` obligatorio en todo evento; `batteryMv` rechazado. La app muestra el rail activo.
 
 11. **El reverse-geocode actual no garantiza la política de Nominatim.**  
     `staleTime` evita repetir una misma consulta, pero varias filas/posiciones distintas pueden lanzar peticiones en paralelo. Antes de producción hay que centralizar cache + rate limit o retirar el reverse-geocode masivo del cliente.
@@ -114,7 +120,7 @@ El banco Python continúa siendo útil como implementación de referencia y simu
 - Una 18650 como reserva **solo si** el bloque térmico de carga queda validado por hardware.
 - Alimentación final desde 12 V permanente mediante fusible, protección automotriz, UVLO autónomo y conversor de muy bajo consumo.
 
-### Banco de medida, no parte del coche
+### Banco de medida, no parte del vehiculo
 
 - **ESP32-S3 N16R8** externa como registrador.
 - **INA219 con shunt R100 = 0,1 ohm**.
@@ -123,7 +129,7 @@ El banco Python continúa siendo útil como implementación de referencia y simu
 
 El ESP32-S3 externo lee el INA219 y envía CSV/telemetría al Mac. No debe alimentarse desde el ramal que se está midiendo.
 
-El INA219 es suficiente como **instrumento de cribado** para distinguir órdenes de magnitud y calcular consumo medio/energía. Con R100 su resolución física y la tolerancia del módulo genérico hacen que una lectura cercana al gate de 2 mA deba confirmarse con multímetro calibrado o instrumental mejor antes de aprobar el coche. Tampoco sustituye a un osciloscopio/profiler para capturar picos LTE muy breves. A corrientes LTE altas, el shunt de 0,1 Ω introduce caída de tensión y esa caída también debe registrarse.
+El INA219 es suficiente como **instrumento de cribado** para distinguir órdenes de magnitud y calcular consumo medio/energía. Con R100 su resolución física y la tolerancia del módulo genérico hacen que una lectura cercana al gate de 2 mA deba confirmarse con multímetro calibrado o instrumental mejor antes de aprobar el vehiculo. Tampoco sustituye a un osciloscopio/profiler para capturar picos LTE muy breves. A corrientes LTE altas, el shunt de 0,1 Ω introduce caída de tensión y esa caída también debe registrarse.
 
 ---
 
@@ -233,9 +239,9 @@ determinar si existe autorización local válida
 
 El evento se persiste antes de comunicaciones costosas para sobrevivir a reset, pérdida de fuente o cobertura.
 
-Los umbrales, duración y debounce del LIS3DH se determinan con el coche real. No se fijan por intuición.
+Los umbrales, duración y debounce del LIS3DH se determinan con el vehiculo real. No se fijan por intuición.
 
-Cada wake no autorizado tiene un coste energético medible: el ciclo completo wake → ventana BLE → conexión LTE → transmisión → retorno a deep sleep. Ese coste, `E_ciclo`, se mide en banco y se trata como parámetro de diseño. Escenario adversario explícito: un atacante que provoque movimiento repetido (sacudir o golpear el coche) ataca la **batería**, no la criptografía. Cualquier contramedida (debounce, agrupación de alertas, backoff acotado) se decide con `E_ciclo` medido y declara de antemano un techo máximo de retardo de alerta. La detección no se silencia jamás por debajo de ese techo: suprimir alertas no es una opción de ahorro energético.
+Cada wake no autorizado tiene un coste energético medible: el ciclo completo wake → ventana BLE → conexión LTE → transmisión → retorno a deep sleep. Ese coste, `E_ciclo`, se mide en banco y se trata como parámetro de diseño. Escenario adversario explícito: un atacante que provoque movimiento repetido (sacudir o golpear el vehiculo) ataca la **batería**, no la criptografía. Cualquier contramedida (debounce, agrupación de alertas, backoff acotado) se decide con `E_ciclo` medido y declara de antemano un techo máximo de retardo de alerta. La detección no se silencia jamás por debajo de ese techo: suprimir alertas no es una opción de ahorro energético.
 
 ---
 
@@ -280,7 +286,7 @@ Las credenciales locales se guardan en SecureStore en el móvil. En el firmware 
 
 ### Primer movimiento del propietario
 
-Un ESP32 en deep sleep no mantiene BLE activo. Por eso la app puede preparar una intención local y esperar a que el LIS3DH despierte Guardian al abrir/entrar/mover ligeramente el coche. Tras despertar, Guardian abre una ventana BLE corta para completar el desafío.
+Un ESP32 en deep sleep no mantiene BLE activo. Por eso la app puede preparar una intención local y esperar a que el LIS3DH despierte Guardian al abrir/entrar/mover ligeramente el vehiculo. Tras despertar, Guardian abre una ventana BLE corta para completar el desafío.
 
 La autorización local **no debe depender de que haya Internet o cobertura LTE**: un teléfono ya emparejado debe poder autorizar el viaje localmente y sincronizar el resultado con backend después.
 
@@ -347,7 +353,7 @@ RID = trunc64( HMAC-SHA256(K_ble, "rid/v1" || slot) ),  slot = epoch / 15 min
 
 - Duración de ventana `T_win`: **parámetro**, valor inicial 10 s, máximo duro 30 s.
 - Corte garantizado: al llegar a `T_win` el stack BLE se desmonta y el dispositivo entra en deep sleep **aunque exista conexión activa a mitad de protocolo**. Ningún tráfico prolonga la ventana.
-- Presupuesto: ventana BLE completa ≤ **0,5 mAh** medidos desde 12 V con el banco INA219. Potencia de transmisión BLE: la mínima que cumpla fiabilidad en el coche real (**parámetro**, validar).
+- Presupuesto: ventana BLE completa ≤ **0,5 mAh** medidos desde 12 V con el banco INA219. Potencia de transmisión BLE: la mínima que cumpla fiabilidad en el vehiculo real (**parámetro**, validar).
 - Un watchdog debe cortar cualquier flujo colgado → deep sleep + evento persistido (`window_aborted`), respetando el principio de persistir-primero (§5).
 
 #### R6. Comportamiento ante violación de protocolo (fail-closed)
@@ -420,7 +426,7 @@ Esperando a Guardian...
 
 No mueve el marcador a una supuesta posición nueva hasta recibir un `gnss_fix` relacionado con ese comando.
 
-**El protocolo v1 actual no conserva un `commandId`/correlation id en los eventos.** Antes de implementar `LOCATE_NOW` hay que extender el contrato de evento o crear un mensaje de resultado específico que permita correlacionar de forma inequívoca solicitud, fix y ACK.
+**Implementado (PR2):** el contrato de evento es ahora `schemaVersion 2`, el único que existe — un evento que no declare `schemaVersion: 2` se rechaza. `commandId` viaja solo en `gnss_fix` y correlaciona solicitud, fix y ACK: el backend pasa el comando a `ACKED` de forma atómica solo si sigue `PENDING` y no ha expirado. Un `gnss_fix` sin `position` se rechaza: sin coordenadas no hay fix que confirmar (y un fix vacío no puede ACKar un `LOCATE_NOW`). Un fix tardío sobre un comando ya expirado guarda la posición (dato valioso) pero NO lo marca como atendido. El wake best-effort del flujo sigue diferido a firmware: hoy el dispositivo ya despierto hace poll y recoge el comando.
 
 ### Flujo del dispositivo
 
@@ -551,6 +557,8 @@ Reglas:
 - payload con schema estricto;
 - ningún shell, URL arbitraria, AT command arbitrario o código remoto.
 
+**Implementado (PR2):** `LOCATE_NOW` existe con `PENDING | ACKED | EXPIRED` y TTL de 120 s. Sin canal de wake real todavía, el dispositivo despierto pregunta por `POST /v1/commands/poll` autenticado con `K_command`; la expiración es lazy (al leer). El ACK es el `gnss_fix` con `commandId` llegando por el canal de eventos — nunca un autoack del backend. `requestLocate` es idempotente: reutiliza el `PENDING` vivo (get-or-create en transacción serializable) en lugar de encolar otro. Quedan para más adelante: `requestedBy` en el modelo, límite de pendientes y rate limit del endpoint.
+
 ---
 
 ## 10. Autenticación dispositivo <-> backend
@@ -580,6 +588,8 @@ K_root
 
 Así una clave usada en un contexto no se reutiliza directamente en otro.
 
+**Implementado (PR2):** `deriveKey(K_root, deviceId, contexto)` = HKDF-SHA256 con `salt=deviceId` e `info` propia por canal (`guardian/event/v1`, `guardian/command/v1`, `guardian/ble/v1`). `K_event` verifica `/v1/events`, `K_command` verifica `/v1/commands/poll`, y `K_root` no verifica nada: los tests y el drive lo comprueban en ambos sentidos. El cifrado en reposo queda para PR3.
+
 El secreto raíz/derivados del backend deben almacenarse cifrados en reposo antes de desplegar Internet público. Para un despliegue personal inicial puede usarse una master key fuera de la base de datos; si se migra a cloud, usar un servicio de secretos/KMS.
 
 ---
@@ -607,6 +617,8 @@ Añadir:
 - estados `PENDING / WAITING / UPDATED / FAILED`;
 - indicador claro cuando una lectura es antigua.
 
+**Implementado (PR2):** botón *Actualizar ubicación* en la tarjeta de mapa; hora del último fix visible; energía con semántica física (`13.60 V · vehiculo` / reserva según la fuente activa). Los estados del botón derivan del ÚLTIMO comando real, no de suposiciones locales: `PENDING` = esperando fix del dispositivo, `ACKED` = actualizado + hora, `EXPIRED` = sin respuesta, reintento. Nada de falsos confirmados: el único ACK que cuenta es el `gnss_fix` con `commandId`.
+
 ### Botón Iniciar/Finalizar viaje
 
 Eliminar el significado actual de “POST correcto = viaje confirmado”.
@@ -631,6 +643,8 @@ Cambiar el rastro para poder mostrar:
 - posiciones de un incidente concreto;
 - no simplemente las últimas N posiciones mezcladas.
 
+**Implementado (PR2):** `GET /v1/devices/:id/positions?incidentId=...` (desde el evento que abrió el incidente, inmune a sesgos de reloj por usar `seq`) y `?tripId=...` (entre `startedAt`/`endedAt`). Con una alerta abierta, el dashboard navega al mapa ya acotado al incidente (“Rastro desde la alerta”).
+
 ### Alertas
 
 Crear concepto de incidente:
@@ -651,7 +665,7 @@ Mientras `WORKSHOP` no tenga expiración y confirmación física, la app no debe
 
 El polling actual de 5-10 s puede mantenerse durante desarrollo porque consulta solo PostgreSQL/backend.
 
-En una fase posterior, las alertas reales deberían llegar por push al teléfono para no depender de tener la app abierta. Eso no obliga a mantener el dispositivo del coche en conexión continua: el dispositivo solo envía el evento al backend y el backend notifica al móvil.
+En una fase posterior, las alertas reales deberían llegar por push al teléfono para no depender de tener la app abierta. Eso no obliga a mantener el dispositivo del vehiculo en conexión continua: el dispositivo solo envía el evento al backend y el backend notifica al móvil.
 
 ---
 
@@ -686,7 +700,7 @@ Además, la política del Nominatim público limita el uso a un máximo absoluto
 
 ### Regla de aceptación
 
-**Guardian completo debe añadir <= 2 mA de media medidos desde los 12 V del coche durante aparcamiento representativo.**
+**Guardian completo debe añadir <= 2 mA de media medidos desde los 12 V del vehiculo durante aparcamiento representativo.**
 
 Objetivo preferido: acercarse a **1 mA o menos**.
 
@@ -706,13 +720,15 @@ No basta con medir únicamente el ESP32.
 
 ### Telemetría de potencia
 
-El campo v1 `batteryMv` no basta para el producto final. La siguiente evolución del protocolo debe distinguir como mínimo:
+**Implementado (protocolo v2).** Todo evento lleva `power` obligatorio:
 
 ```text
-vehicleBatteryMv
-reserveBatteryMv?   // solo si la medición es fiable
-powerSource         // VEHICLE | RESERVE
+vehicleMv            // int 0..60000, obligatorio — rail del vehiculo
+reserveMv?           // int 0..60000 | null — solo si la medición es fiable
+source               // 'vehicle' | 'reserve' | 'unknown' — rail que alimenta AHORA
 ```
+
+`batteryMv` no existe en el contrato: el backend lo rechaza de forma explícita (400), incluso en `null`. La app muestra el voltaje del rail activo (`reserve` → voltaje de reserva), nunca un único campo "Batería" sin semántica física. Contrato exacto: `docs/CONTRATO_DISPOSITIVO_v0_6.md`.
 
 Temperatura de la reserva y estado de carga solo se añaden si existe sensor/medición físicamente fiables. La app no mostrará porcentajes inferidos sin una base de medida válida.
 
@@ -768,20 +784,20 @@ La transición 12 V -> 18650 puede reiniciar la LILYGO. El firmware debe sobrevi
 
 El esquema V1.4 documentado en el repo muestra CN3065 y la red TEMP con `N9 0R`, por lo que no se considera validada una protección térmica efectiva de carga.
 
-Antes de dejar una 18650 en el coche:
+Antes de dejar una 18650 en el vehiculo:
 
 - verificar físicamente la revisión recibida;
 - comprobar la ruta de carga;
 - bloquear por hardware carga fuera del rango térmico de la celda;
 - probar fallo de sonda;
 - medir corriente de carga real;
-- comprobar qué ocurre si una 18650 descargada intenta recargarse mientras el coche lleva días parado.
+- comprobar qué ocurre si una 18650 descargada intenta recargarse mientras el vehiculo lleva días parado.
 
 Si el cargador integrado puede extraer demasiada energía de la batería principal en ese escenario y no se puede limitar de forma segura, se cambia la arquitectura de carga. No se acepta simplemente porque “el consumo en sleep sea bajo”.
 
 ---
 
-## 15. Protección de la batería del coche
+## 15. Protección de la batería del vehiculo
 
 La protección final no puede depender del ESP32.
 
@@ -808,7 +824,7 @@ Debe funcionar aunque:
 - módem esté bloqueado;
 - la app/backend estén caídos.
 
-Los umbrales no se fijan hasta conocer batería, coche, caídas del cableado y comportamiento real bajo carga.
+Los umbrales no se fijan hasta conocer batería, vehiculo, caídas del cableado y comportamiento real bajo carga.
 
 ---
 
@@ -923,14 +939,14 @@ Medir pico, media y duración de carga de una 18650 parcialmente descargada.
 
 ---
 
-## 17. Criterios de go/no-go antes del coche
+## 17. Criterios de go/no-go antes del vehiculo
 
 Guardian **NO se instala permanentemente** si falla cualquiera de estos puntos:
 
 | Gate | Exigencia |
 | --- | --- |
 | Consumo | <= 2 mA medios adicionales desde 12 V en aparcamiento representativo; si el resultado queda cerca del límite, confirmar con instrumento independiente |
-| Protección batería coche | UVLO autónomo, histéresis y corriente residual validados |
+| Protección batería vehiculo | UVLO autónomo, histéresis y corriente residual validados |
 | Movimiento | LIS3DH despierta de forma fiable sin falsos positivos inaceptables |
 | LTE | timeouts/backoff probados, sin bucles de búsqueda indefinidos |
 | GNSS | timeout y posición fechada; nunca stale como “actual” |
@@ -992,7 +1008,7 @@ Solo después de P2:
 3. UVLO independiente;
 4. ruta 18650 + protección térmica real;
 5. P5-P9;
-6. solo entonces instalación reversible en coche.
+6. solo entonces instalación reversible en vehiculo.
 
 ---
 
@@ -1060,9 +1076,9 @@ La arquitectura objetivo queda:
                                       +--> 18650 solo con carga térmicamente segura
 ```
 
-La app y el backend son herramientas de control y visualización. **Guardian físico sigue siendo la autoridad sobre el estado que protege el coche.**
+La app y el backend son herramientas de control y visualización. **Guardian físico sigue siendo la autoridad sobre el estado que protege el vehiculo.**
 
-El backend puede pedir una localización, almacenar eventos y notificar; no puede convertir por sí solo una fila SQL en “coche autorizado”.
+El backend puede pedir una localización, almacenar eventos y notificar; no puede convertir por sí solo una fila SQL en “vehiculo autorizado”.
 
 El remote wake es una optimización energética/UX que se gana con mediciones. El sistema antirrobo funciona aunque esa optimización finalmente se descarte.
 
@@ -1089,4 +1105,4 @@ Fabricante:
 
 ---
 
-**Resultado de esta revisión:** no hace falta rehacer la app. La base móvil/backend actual es válida. La siguiente frontera real del proyecto es firmware + consumo + autoridad de estado. Antes de añadir más UI, Guardian debe demostrar en mesa que puede despertar, enviar, localizarse y volver a dormir sin comprometer la batería del coche.
+**Resultado de esta revisión:** no hace falta rehacer la app. La base móvil/backend actual es válida. La siguiente frontera real del proyecto es firmware + consumo + autoridad de estado. Antes de añadir más UI, Guardian debe demostrar en mesa que puede despertar, enviar, localizarse y volver a dormir sin comprometer la batería del vehiculo.

@@ -12,7 +12,7 @@ El diseño v0.5 queda como referencia histórica funcional, pero su tabla de com
 | 1 | **Nano-SIM 4G** con datos | Conectividad LTE real. | Operador pendiente de elegir según cobertura. |
 | 1 | **USB-C de datos + fuente 5 V estable capaz de soportar los picos del módem** | Programación y primeras pruebas de mesa. | Reutilizar si ya se dispone. |
 | varios | **Dupont / cableado de banco** | I²C, interrupción y alimentación de sensores. | Necesario. |
-| 1 | **ESP32-S3 N16R8** externa | Registrador de consumo; se conecta al Mac y no forma parte del coche. | Elegida. |
+| 1 | **ESP32-S3 N16R8** externa | Registrador de consumo; se conecta al Mac y no forma parte del vehiculo. | Elegida. |
 | 1 | **INA219 con shunt R100 = 0,1 Ω** | Medición de corriente/tensión/potencia para caracterizar Guardian. | Elegido. |
 
 La ESP32-S3 de medida y el INA219 son **instrumentación de desarrollo**, no componentes de la instalación final.
@@ -59,7 +59,7 @@ El breakout genérico se tratará como dispositivo de **3,3 V** hasta verificar 
 5. verificar que `INT1` despierta el ESP32;
 6. medir su consumo dentro del conjunto.
 
-Los umbrales de movimiento no se fijan antes de probarlo en el coche real.
+Los umbrales de movimiento no se fijan antes de probarlo en el vehiculo real.
 
 ## Alimentación y reserva
 
@@ -77,7 +77,7 @@ No comprar un buck genérico o un módulo UVLO al azar como solución definitiva
 
 ### 18650
 
-La celda sigue siendo candidata de reserva, no una pieza aprobada para permanecer cargando dentro del coche.
+La celda sigue siendo candidata de reserva, no una pieza aprobada para permanecer cargando dentro del vehiculo.
 
 Antes de usarla de forma permanente hay que validar:
 
@@ -85,7 +85,7 @@ Antes de usarla de forma permanente hay que validar:
 - límites térmicos de la celda;
 - corte de carga por hardware fuera de rango;
 - fallo de la sonda;
-- corriente de recarga desde la batería del coche;
+- corriente de recarga desde la batería del vehiculo;
 - transición 12 V → reserva y recuperación tras reset.
 
 Ver [alimentación y reserva](hardware/ALIMENTACION_Y_RESERVA.md).
@@ -128,4 +128,4 @@ Si la alimentación normal impide el sleep del módem, no se asume una modificac
 7. Implementar el primer evento físico firmado hacia el backend.
 8. Solo después decidir `REMOTE_READY`, intervalos de check-in y bloque de potencia final.
 
-**No instalar todavía en el coche.** El CI del repositorio valida software; no valida corriente, temperatura, cobertura, protección automotriz ni reserva.
+**No instalar todavía en el vehiculo.** El CI del repositorio valida software; no valida corriente, temperatura, cobertura, protección automotriz ni reserva.

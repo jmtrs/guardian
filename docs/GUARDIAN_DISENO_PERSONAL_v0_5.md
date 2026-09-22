@@ -4,7 +4,7 @@
 > **Documento histórico.** La arquitectura de integración vigente está en [GUARDIAN v0.6](GUARDIAN_INTEGRACION_APP_DISPOSITIVO_v0_6.md) y la lista de componentes vigente en [COMPONENTES.md](COMPONENTES.md). Conservar v0.5 como referencia del diseño funcional original; **no usar su tabla de compra ni sus descripciones de “app futura” como fuente de verdad actual**.
 
 **Fecha:** 20 de septiembre de 2026  
-**Propósito:** un vigilante autónomo para un coche personal antiguo de 12 V, sin objetivo de comercialización por ahora.  
+**Propósito:** un vigilante autónomo para un vehiculo personal antiguo de 12 V, sin objetivo de comercialización por ahora.  
 **Estado:** especificación actualizada; el código Python del repositorio solo simula eventos y prueba un receptor local. No hay firmware cargado ni pruebas de LTE/GNSS/acelerómetro en la LILYGO. Este documento sustituye la guía v0.4 entregada fuera del repositorio; se han corregido su antigua selección Waveshare y el acelerómetro inicialmente previsto.
 
 > Regla de diseño: pocas piezas, funciones definidas, instalación reversible y protección que no dependa de que el firmware funcione. Guardian NO puede controlar el motor, arranque, dirección, frenos, inmovilizador o centralitas.
@@ -13,11 +13,11 @@
 
 | Situación | Comportamiento previsto | Límite |
 |---|---|---|
-| Aparcado y armado | Acelerómetro vigila movimientos, se supervisa la tensión del coche y se duerme la radio cuando procede. | El último contacto puede ser antiguo por ahorro energético. |
+| Aparcado y armado | Acelerómetro vigila movimientos, se supervisa la tensión del vehiculo y se duerme la radio cuando procede. | El último contacto puede ser antiguo por ahorro energético. |
 | Propietario presente | BLE puede detectar un teléfono conocido, pero **no desarma por sí solo**. | Inicio de viaje exige orden autenticada y confirmación del dispositivo. |
 | Viaje autorizado | No avisa por vibraciones propias de la conducción. | Pérdida momentánea de BLE o LTE no revoca el viaje. |
 | Movimiento sin autorización | Guarda evento, intenta avisar por 4G antes de esperar el GPS y después actualiza la posición. | El aviso puede demorarse por cobertura; no diagnostica por sí mismo un robo. |
-| Alimentación desconectada o baja | Supervisor independiente corta **solo el ramal Guardian**; reserva intenta emitir una alerta. | No garantiza arranque del coche ni seguimiento indefinido. |
+| Alimentación desconectada o baja | Supervisor independiente corta **solo el ramal Guardian**; reserva intenta emitir una alerta. | No garantiza arranque del vehiculo ni seguimiento indefinido. |
 | Garaje/sin cobertura | Conserva eventos; informa de la fecha de la última posición GNSS válida. | Nunca presenta una ubicación antigua como actual. |
 
 ```text
@@ -27,14 +27,14 @@ APARCADO / ARMADO ── orden autenticada de la app ──► VIAJE AUTORIZADO
        │
        └── movimiento sin autorización ──► ALERTA ──► GNSS / SEGUIMIENTO
 
-BATERÍA COCHE BAJA ──► CORTE AUTÓNOMO SOLO DE GUARDIAN ──► RESERVA / APAGADO
+BATERÍA VEHICULO BAJA ──► CORTE AUTÓNOMO SOLO DE GUARDIAN ──► RESERVA / APAGADO
 ```
 
 La primera versión utiliza «Iniciar viaje» y «Finalizar viaje» desde una app que hable con el dispositivo de forma autenticada. Una señal BLE, MAC, baliza o RSSI no demuestra identidad ni proximidad segura. No prometemos modo manos libres. Si se olvida finalizar el viaje, la app debe mostrar claramente que continúa autorizado; no rearmar arbitrariamente en semáforos. Antes del uso cotidiano hacen falta recuperación de móvil perdido y modo taller temporal.
 
 ## 2. Instalación prevista: exclusivamente 12 V permanente + masa
 
-**No OBD, no mechero, no CAN, no empalmes a circuitos críticos.** El primer prototipo se construye por USB sobre la mesa, fuera del coche.
+**No OBD, no mechero, no CAN, no empalmes a circuitos críticos.** El primer prototipo se construye por USB sobre la mesa, fuera del vehiculo.
 
 ```text
 +12 V PERMANENTE APTO DEL VEHÍCULO
@@ -56,7 +56,7 @@ La primera versión utiliza «Iniciar viaje» y «Finalizar viaje» desde una ap
         │                         ├──► BLE / LTE / GNSS
         │                         └──► backend ──► móvil
         │
-        └────► carga y reserva 18650 compatibles (sin retorno al coche)
+        └────► carga y reserva 18650 compatibles (sin retorno al vehiculo)
 
 MASA CORRECTA DEL VEHÍCULO ─────────────► retorno de Guardian
 ```
@@ -84,7 +84,7 @@ La LILYGO anunciada dispone de alojamiento para **una celda 18650 Li-ion nominal
 - [Ejemplo de compra de Samsung INR18650-30Q](https://bateriasonline.com/es/baterias-litio-recargable/bateria-litio-samsung-inr-18650-30q-3000mah-samsung-baterias-litio-recargable.html): comprobar precio, proveedor, terminales y tamaño antes de pedir.
 - La batería 18650 de BricoGeek que viene **con cable JST** no es una celda para colocar directamente en el portaceldas. Las celdas largas/protegidas pueden no caber; no forzar contactos.
 
-**Distinción crucial:** una celda que sirve para probar la reserva en interior **no queda aprobada para carga continua dentro del coche**. La carga de una Li-ion habitual tiene límites térmicos; el habitáculo puede excederlos. Confirmar documentación del cargador de LILYGO, temperatura efectiva del emplazamiento y cómo se bloquea físicamente la carga fuera de rango. Cambiar entre USB y celda **puede reiniciar la placa**: el aviso de corte/pérdida debe persistirse y recuperarse al arrancar. No prometer transmisión garantizada después de retirar alimentación si el reinicio, la cobertura o la celda lo impiden.
+**Distinción crucial:** una celda que sirve para probar la reserva en interior **no queda aprobada para carga continua dentro del vehiculo**. La carga de una Li-ion habitual tiene límites térmicos; el habitáculo puede excederlos. Confirmar documentación del cargador de LILYGO, temperatura efectiva del emplazamiento y cómo se bloquea físicamente la carga fuera de rango. Cambiar entre USB y celda **puede reiniciar la placa**: el aviso de corte/pérdida debe persistirse y recuperarse al arrancar. No prometer transmisión garantizada después de retirar alimentación si el reinicio, la cobertura o la celda lo impiden.
 
 ### Comprar después, para instalación permanente
 
@@ -108,18 +108,18 @@ LIS3DH ── I²C + INT ──► ESP32 (firmware por estados)
 
 **Firmware pendiente:** módulos `motion`, `power`, `ble_auth`, `gnss`, `cellular`, `event_queue` y `device_state`. No incluir comunicaciones arbitrarias ni desarmado en el backend de telemetría. Guardar número de secuencia, evento pendiente y estado de sesión ante reinicios. Tiempo GNSS válido en cada fix; alerta inicial sin esperar coordenadas. Despertar por INT del LIS3DH en GPIO compatible y medir consumo real de la placa en sueño.
 
-**Backend actual:** `guardian/` contiene un **simulador Python**, receptor HTTP restringido a `127.0.0.1`, HMAC por dispositivo, comprobación de secuencias para evitar replay, SQLite y Telegram opcional. Es un banco local: **no es firmware ESP32, no utiliza módem LTE ni implementa autorización teléfono→coche, y no se debe publicar por HTTP en Internet**. Para el dispositivo real: TLS con verificación, autenticación por dispositivo y secretos protegidos; no reutilizar una clave de demo.
+**Backend actual:** `guardian/` contiene un **simulador Python**, receptor HTTP restringido a `127.0.0.1`, HMAC por dispositivo, comprobación de secuencias para evitar replay, SQLite y Telegram opcional. Es un banco local: **no es firmware ESP32, no utiliza módem LTE ni implementa autorización teléfono→vehiculo, y no se debe publicar por HTTP en Internet**. Para el dispositivo real: TLS con verificación, autenticación por dispositivo y secretos protegidos; no reutilizar una clave de demo.
 
-**App futura:** muestra última comunicación, batería coche y reserva, estado armado/viaje, ubicación válida con hora, alertas y modo taller. El cambio de estado solo se muestra una vez **confirmado por Guardian**.
+**App futura:** muestra última comunicación, batería vehiculo y reserva, estado armado/viaje, ubicación válida con hora, alertas y modo taller. El cambio de estado solo se muestra una vez **confirmado por Guardian**.
 
 ## 5. Bocetos de interfaz (no implementados)
 
 ```text
 ┌──────────────────────────────────────────┐
-│ GUARDIAN · MI COCHE              ARMADO   │
+│ GUARDIAN · MI VEHICULO          ARMADO     │
 ├──────────────────────────────────────────┤
 │ Último contacto: 18:42                   │
-│ Batería coche: 12,6 V · lectura 18:42     │
+│ Batería vehiculo: 12,6 V · lectura 18:42  │
 │ Reserva: disponible                      │
 │ Movimiento: sin incidencias              │
 │                                          │
@@ -149,10 +149,10 @@ LIS3DH ── I²C + INT ──► ESP32 (firmware por estados)
 ┌──────────────────────────────────────────┐
 │ GUARDIAN                       ENERGÍA    │
 ├──────────────────────────────────────────┤
-│ Batería coche: 12,6 V · 18:42             │
+│ Batería vehiculo: 12,6 V · 18:42             │
 │ Fuente: principal                        │
 │ Reserva: estado pendiente de telemetría  │
-│ Umbral de corte: específico del coche    │
+│ Umbral de corte: específico del vehiculo    │
 │ [ HISTORIAL DE TENSIÓN ]                 │
 └──────────────────────────────────────────┘
 ```
@@ -165,7 +165,7 @@ No mostrar porcentaje de reserva si no existe medición fiable. Mostrar **hora d
 2. **Primer evento físico:** soldar cabeceras, conectar 3,3 V/I²C/INT; confirmar detección de movimiento y despertar. Persistir evento y hacerlo llegar por módem mediante conexión TLS y autenticación por dispositivo. Hasta entonces, el evento del repositorio sigue siendo simulado.
 3. **Viajes autorizados:** implementar app BLE, desafío/respuesta, confirmación real y recuperación tras reinicios; modo taller y recuperación de teléfono antes del uso diario.
 4. **Potencia:** cerrar esquema de entrada automotriz + supervisor independiente + conversor + reserva y gestión térmica. Comprobar en mesa polaridad, consumo total al aparcar, corte incluso si el ESP32 está detenido, corriente residual y envío/recuperación de evento al desconectar.
-5. **Coche:** seleccionar circuito de 12 V permanente no crítico, masa y protección correctos para ese coche; revisión profesional, fijación mecánica y comprobación de consumo en reposo con contacto quitado.
+5. **Vehiculo:** seleccionar circuito de 12 V permanente no crítico, masa y protección correctos para ese vehiculo; revisión profesional, fijación mecánica y comprobación de consumo en reposo con contacto quitado.
 
 **Objetivo de reposo de diseño:** ≤2 mA de media del conjunto alimentado a 12 V (incluye convertidor, supervisor, radio y recargas). **No es un dato demostrado de la LILYGO.** Si la placa de desarrollo no lo permite, conservarla como banco de firmware y revisar el hardware antes de la instalación. No hacen falta decenas de pruebas de viabilidad, pero las tres de potencia/corte/reserva son innegociables.
 
@@ -176,4 +176,4 @@ No mostrar porcentaje de reserva si no existe medición fiable. Mostrar **hora d
 - [ADI: alimentación de aplicaciones automotrices](https://www.analog.com/en/resources/app-notes/an-2083.html).
 - [Componentes y compra por etapas](COMPONENTES.md) · [Proyecto y CI](../README.md).
 
-**Hecho:** software de banco con pruebas automatizadas y documentación de selección. **Pendiente:** toda la integración física, firmware, app BLE y alimentación instalada. Un CI verde no prueba el dispositivo ni el montaje en el coche.
+**Hecho:** software de banco con pruebas automatizadas y documentación de selección. **Pendiente:** toda la integración física, firmware, app BLE y alimentación instalada. Un CI verde no prueba el dispositivo ni el montaje en el vehiculo.
