@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -76,9 +76,19 @@ export function EventsScreen() {
 
   const { data: devices } = useDevices({ refetchInterval: 10_000 });
   const device = devices?.[0];
-  const { data: events, isLoading, refetch, isRefetching } = useDeviceEvents(device?.id, 100, {
+  const { data: events, isLoading, refetch } = useDeviceEvents(device?.id, 100, {
     refetchInterval: 10_000,
   });
+  // Spinner solo en pull manual: el polling de 10s NO debe mostrar el indicador.
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   return (
     <ScreenFrame>
@@ -89,9 +99,11 @@ export function EventsScreen() {
         contentContainerStyle={styles.content}
         refreshControl={
           <RefreshControl
-            refreshing={isRefetching}
-            onRefresh={() => refetch()}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
             tintColor={theme.semantic.accent.warning}
+            colors={[theme.semantic.accent.warning]}
+            progressBackgroundColor={theme.semantic.bg.surface}
           />
         }
         ListHeaderComponent={
