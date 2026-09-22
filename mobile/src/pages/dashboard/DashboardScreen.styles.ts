@@ -114,14 +114,6 @@ export function createStyles(theme: UITheme) {
       right: 0,
       bottom: 0,
     },
-    deviceName: {
-      color: semantic.fg.muted,
-      fontFamily: fontFamily.ui.medium,
-      fontSize: 12,
-      letterSpacing: 3,
-      textTransform: 'uppercase',
-      textAlign: 'center',
-    },
     statusText: {
       color: semantic.accent.warning,
       fontFamily: fontFamily.display,
@@ -228,28 +220,54 @@ export function createStyles(theme: UITheme) {
       flex: 1,
       gap: tokens.spacing['1'],
     },
-    mapLabel: {
-      color: semantic.fg.muted,
-      fontFamily: fontFamily.ui.medium,
-      fontSize: 11,
-      letterSpacing: 3,
-      textTransform: 'uppercase',
-    },
+    // Sin label: la direccion es el titular de la tarjeta.
     mapValue: {
       color: semantic.fg.primary,
       fontFamily: fontFamily.ui.regular,
-      fontSize: 13,
+      fontSize: 14,
     },
     mapDetail: {
       color: semantic.fg.muted,
       fontFamily: fontFamily.ui.regular,
       fontSize: 11,
       letterSpacing: 0.5,
+      // En la fila footer cede sitio al boton de fix si la pantalla es estrecha.
+      flexShrink: 1,
     },
     mapArrow: {
       color: semantic.accent.warning,
       fontFamily: fontFamily.ui.medium,
       fontSize: 16,
+    },
+    // Ultima posicion + "Actualizar ubicacion" comparten fila: la tarjeta no
+    // apila lineas sueltas. El boton pide un LOCATE_NOW real — es una accion.
+    mapFooterRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: tokens.spacing['3'],
+      marginTop: tokens.spacing['1'],
+    },
+    locateRow: {
+      flexShrink: 1,
+      paddingHorizontal: tokens.spacing['3'],
+      paddingVertical: tokens.spacing['1'],
+      borderWidth: 1,
+      borderColor: semantic.border.metal,
+      backgroundColor: semantic.bg.inset,
+    },
+    locateText: {
+      color: semantic.accent.warning,
+      fontFamily: fontFamily.ui.medium,
+      fontSize: 11,
+      letterSpacing: 2,
+      textTransform: 'uppercase',
+    },
+    locateTextMuted: {
+      color: semantic.fg.muted,
+    },
+    locateTextAlert: {
+      color: semantic.accent.red,
     },
     // Fila vacia dentro del panel de eventos (reserva altura, sin pop-in).
     emptyEventsRow: {

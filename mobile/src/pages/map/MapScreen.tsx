@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Linking, Pressable, Text, View } from 'react-native';
 import { Camera, GeoJSONSource, Layer, Map, Marker } from '@maplibre/maplibre-react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
 import { useDevicePositions, useDevices } from '@/api/devices';
@@ -25,7 +25,12 @@ export function MapScreen() {
 
   const { data: devices } = useDevices({ refetchInterval: 10_000 });
   const device = devices?.[0];
-  const { data: positions } = useDevicePositions(device?.id, 100, { refetchInterval: 10_000 });
+  // Rastro acotado: con ?incidentId=... el backend devuelve posiciones desde
+  // que abrio el incidente (el dashboard navega asi con alerta abierta). Sin
+  // params, historial completo.
+  const { incidentId } = useLocalSearchParams<{ incidentId?: string }>();
+  const scope = incidentId ? { incidentId } : undefined;
+  const { data: positions } = useDevicePositions(device?.id, 100, { refetchInterval: 10_000 }, scope);
   // Tapa oscura hasta que el estilo carga: evita el flash blanco de MapLibre.
   const [mapReady, setMapReady] = useState(false);
   // Fallback: si el callback no llega, no dejar la tapa pegada.
@@ -51,7 +56,7 @@ export function MapScreen() {
   const header = (
     <View style={styles.headerBlock}>
       <Text style={styles.title}>{t('map.title')}</Text>
-      {device ? <Text style={styles.subtitle}>{device.name}</Text> : null}
+      {incidentId ? <Text style={styles.subtitle}>{t('map.trailFromAlert')}</Text> : null}
     </View>
   );
 
@@ -133,7 +138,6 @@ export function MapScreen() {
 
       {/* Tarjeta inferior: direccion (reverse geocode) + coords + navegacion. */}
       <View style={styles.infoCard}>
-        <Text style={styles.infoLabel}>{t('map.location')}</Text>
         <Text style={styles.infoAddress} numberOfLines={1}>
           {addressLabel}
         </Text>
