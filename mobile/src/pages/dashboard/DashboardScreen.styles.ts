@@ -96,6 +96,10 @@ export function createStyles(theme: UITheme) {
     statusPanelTrip: {
       borderColor: semantic.accent.dirtyAmber,
     },
+    statusPanelWorkshop: {
+      borderColor: semantic.accent.dirtyAmber,
+      shadowColor: semantic.accent.dirtyAmber,
+    },
     // Placeholder animado (HUDScan / LaneStripe) tras el contenido del panel.
     statusOverlay: {
       position: 'absolute',
@@ -130,6 +134,37 @@ export function createStyles(theme: UITheme) {
     },
     statusTextTrip: {
       color: semantic.accent.warning,
+    },
+    statusTextWorkshop: {
+      color: semantic.accent.dirtyAmber,
+    },
+    // Subline del incidente: cuenta atras de taller / estado "revisado".
+    incidentSub: {
+      color: semantic.fg.muted,
+      fontFamily: fontFamily.ui.regular,
+      fontSize: 12,
+      letterSpacing: 1,
+      textAlign: 'center',
+    },
+    incidentSubAlert: {
+      color: semantic.accent.red,
+    },
+    // Boton "Revisado": reconoce la alerta SIN desarmar.
+    ackButton: {
+      alignSelf: 'center',
+      marginTop: tokens.spacing['1'],
+      paddingHorizontal: tokens.spacing['5'],
+      paddingVertical: tokens.spacing['2'],
+      borderWidth: 1,
+      borderColor: semantic.border.danger,
+      backgroundColor: semantic.bg.inset,
+    },
+    ackButtonText: {
+      color: semantic.accent.red,
+      fontFamily: fontFamily.ui.medium,
+      fontSize: 12,
+      letterSpacing: 2,
+      textTransform: 'uppercase',
     },
     metaBlock: {
       gap: tokens.spacing['2'],

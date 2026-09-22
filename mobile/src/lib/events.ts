@@ -28,6 +28,18 @@ export function getEventLabel(kind: string, t: TFunction): string {
   return labels[kind] ?? kind;
 }
 
+// Cuenta atras compacta hasta `iso` ("1h 05m" / "12m" / "0m"). null si no hay
+// fecha o ya expiro. Se recalcula en cada render (el polling refresca a 5s).
+export function formatCountdown(iso: string | null): string | null {
+  if (!iso) return null;
+  const ms = new Date(iso).getTime() - Date.now();
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  const totalMin = Math.floor(ms / 60_000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`;
+}
+
 // "22:41" si es hoy, "20 sep, 22:41" si no — compacto para timeline.
 export function formatEventTime(iso: string): string {
   const date = new Date(iso);

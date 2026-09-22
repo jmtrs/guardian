@@ -3,12 +3,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from './client';
 
 export type DeviceState = 'ARMED' | 'TRIP' | 'WORKSHOP';
+export type TripState = 'IDLE' | 'REQUESTED' | 'CONFIRMED';
 
 export type Device = {
   id: string;
   name: string;
   ownerId: string;
   state: DeviceState;
+  tripState: TripState;
+  workshopUntil: string | null;
   lastSeq: number;
   lastSeenAt: string | null;
   lastLat: number | null;
@@ -18,6 +21,20 @@ export type Device = {
   createdAt: string;
   updatedAt: string;
   trips?: TripAuthorization[];
+};
+
+export type IncidentKind = 'suspected_movement' | 'power_lost';
+export type IncidentState = 'OPEN' | 'ACKNOWLEDGED' | 'CLOSED';
+
+export type Incident = {
+  id: string;
+  deviceId: string;
+  kind: IncidentKind;
+  state: IncidentState;
+  openedAt: string;
+  acknowledgedAt: string | null;
+  closedAt: string | null;
+  openedByEventSeq: number;
 };
 
 export type DevicePosition = {
@@ -53,6 +70,7 @@ export const deviceKeys = {
   all: ['devices'] as const,
   events: (deviceId: string) => ['devices', deviceId, 'events'] as const,
   positions: (deviceId: string) => ['devices', deviceId, 'positions'] as const,
+  incidents: (deviceId: string) => ['devices', deviceId, 'incidents'] as const,
 };
 
 export function useDevices(options?: { refetchInterval?: number }) {
@@ -103,9 +121,43 @@ export function useDevicePositions(
   });
 }
 
+// Incidentes de seguridad: alerta persistente (no derivada del ultimo evento).
+export function useIncidents(deviceId: string | undefined, options?: { refetchInterval?: number }) {
+  return useQuery({
+    queryKey: deviceKeys.incidents(deviceId ?? 'none'),
+    queryFn: async () => {
+      const response = await apiClient.get<Incident[]>(`/v1/devices/${deviceId}/incidents`);
+      return response.data;
+    },
+    enabled: Boolean(deviceId),
+    refetchInterval: options?.refetchInterval,
+  });
+}
+
+// "Revisado": OPEN -> ACKNOWLEDGED. NO desarma. Refresca incidentes tras el ack.
+export function useAcknowledgeIncident(deviceId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (incidentId: string) => {
+      const response = await apiClient.post(`/v1/incidents/${incidentId}/acknowledge`);
+      return response.data;
+    },
+    onSettled: () => {
+      if (deviceId) queryClient.invalidateQueries({ queryKey: deviceKeys.incidents(deviceId) });
+    },
+  });
+}
+
 // Optimistic: cambia el estado del dispositivo en cache al instante para que el
 // tap no espere el roundtrip (evita el "salto" perceptible). Rollback si falla.
-function useTripToggle(deviceId: string | undefined, path: string, nextState: DeviceState) {
+// El tripState optimista significa "solicitud iniciada" (REQUESTED al arrancar):
+// el estado fisico final lo confirma el backend en el roundtrip.
+function useTripToggle(
+  deviceId: string | undefined,
+  path: string,
+  nextState: DeviceState,
+  nextTripState: TripState,
+) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async () => {
@@ -116,7 +168,9 @@ function useTripToggle(deviceId: string | undefined, path: string, nextState: De
       await queryClient.cancelQueries({ queryKey: deviceKeys.all });
       const previous = queryClient.getQueryData<Device[]>(deviceKeys.all);
       queryClient.setQueryData<Device[]>(deviceKeys.all, (old) =>
-        old?.map((d) => (d.id === deviceId ? { ...d, state: nextState } : d)),
+        old?.map((d) =>
+          d.id === deviceId ? { ...d, state: nextState, tripState: nextTripState } : d,
+        ),
       );
       return { previous };
     },
@@ -130,9 +184,10 @@ function useTripToggle(deviceId: string | undefined, path: string, nextState: De
 }
 
 export function useStartTrip(deviceId: string | undefined) {
-  return useTripToggle(deviceId, 'trip/start', 'TRIP');
+  // Optimista: SOLICITANDO (REQUESTED). El backend responde CONFIRMED.
+  return useTripToggle(deviceId, 'trip/start', 'TRIP', 'REQUESTED');
 }
 
 export function useEndTrip(deviceId: string | undefined) {
-  return useTripToggle(deviceId, 'trip/end', 'ARMED');
+  return useTripToggle(deviceId, 'trip/end', 'ARMED', 'IDLE');
 }

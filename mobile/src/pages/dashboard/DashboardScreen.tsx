@@ -9,7 +9,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
-import { useDeviceEvents, useDevices, useEndTrip, useStartTrip } from '@/api/devices';
+import {
+  useAcknowledgeIncident,
+  useDeviceEvents,
+  useDevices,
+  useEndTrip,
+  useIncidents,
+  useStartTrip,
+} from '@/api/devices';
 import { LaneStripe } from '@/ui/assets/placeholders';
 import { AlertPulse } from '@/ui/composites/AlertPulse';
 import { EmptyState } from '@/ui/composites/EmptyState';
@@ -18,7 +25,13 @@ import { Reveal } from '@/ui/composites/Reveal';
 import { ScreenFrame } from '@/ui/composites/ScreenFrame';
 import { ScreenLoader } from '@/ui/composites/ScreenLoader';
 import { useDashboardOrder, type DashboardCard } from '@/lib/dashboard-order';
-import { formatEventTime, getEventGlyph, getEventLabel, isAlertKind } from '@/lib/events';
+import {
+  formatCountdown,
+  formatEventTime,
+  getEventGlyph,
+  getEventLabel,
+  isAlertKind,
+} from '@/lib/events';
 import { useReverseGeocode } from '@/lib/geocode';
 import { useUITheme } from '@/ui/theme';
 
@@ -57,22 +70,38 @@ export function DashboardScreen() {
   const { data: devices, isLoading } = useDevices({ refetchInterval: 5_000 });
   const device = devices?.[0];
   const { data: events } = useDeviceEvents(device?.id, 5, { refetchInterval: 5_000 });
+  const { data: incidents } = useIncidents(device?.id, { refetchInterval: 5_000 });
   const startTrip = useStartTrip(device?.id);
   const endTrip = useEndTrip(device?.id);
+  const acknowledge = useAcknowledgeIncident(device?.id);
 
-  const lastEvent = events?.[0];
   // Bateria: preferimos el valor denormalizado del dispositivo; caemos al ultimo
   // evento con lectura si aun no llego. Placeholder '—' evita el pop-in.
   const batteryMv =
     device?.lastBatteryMv ?? events?.find((e) => e.payload?.batteryMv != null)?.payload?.batteryMv ?? null;
-  const isAlert = device?.state === 'ARMED' && lastEvent?.kind === 'suspected_movement';
-  const isTrip = device?.state === 'TRIP';
 
+  // La ALERTA es un incidente persistente, NO el ultimo evento: un heartbeat
+  // posterior ya no la oculta y power_lost la enciende. Ordenados desc por
+  // openedAt, el primero no cerrado es el activo. OPEN = rojo pulsante;
+  // ACKNOWLEDGED = revisado (sigue activo, sin pulso, NO desarma).
+  const activeIncident = incidents?.find((i) => i.state !== 'CLOSED') ?? null;
+  const isAlert = Boolean(activeIncident);
+  const isOpenAlert = activeIncident?.state === 'OPEN';
+  const isTrip = device?.state === 'TRIP';
+  const isWorkshop = device?.state === 'WORKSHOP';
+  const isRequesting = isTrip && device?.tripState === 'REQUESTED';
+  const workshopCountdown = isWorkshop ? formatCountdown(device?.workshopUntil ?? null) : null;
+
+  // Prioridad visual: alerta > taller > viaje > armado.
   const statusText = isAlert
     ? t('home.statusAlert')
-    : isTrip
-      ? t('home.statusTrip')
-      : t('home.statusArmed');
+    : isWorkshop
+      ? t('home.statusWorkshop')
+      : isTrip
+        ? isRequesting
+          ? t('home.tripRequesting')
+          : t('home.statusTrip')
+        : t('home.statusArmed');
 
   const recentEvents = (events ?? []).slice(0, 3);
   const hasPosition = device?.lastLat != null && device?.lastLon != null;
@@ -166,12 +195,13 @@ export function DashboardScreen() {
           style={[
             styles.statusPanel,
             isAlert && styles.statusPanelAlert,
-            isTrip && styles.statusPanelTrip,
+            !isAlert && isWorkshop && styles.statusPanelWorkshop,
+            !isAlert && isTrip && styles.statusPanelTrip,
           ]}
         >
-          {isAlert ? (
+          {isOpenAlert ? (
             <AlertPulse style={styles.statusOverlay} color={theme.semantic.accent.red} />
-          ) : isTrip ? (
+          ) : !isAlert && (isTrip || isWorkshop) ? (
             <LaneStripe
               style={styles.statusOverlay}
               intensity="medium"
@@ -183,11 +213,33 @@ export function DashboardScreen() {
             style={[
               styles.statusText,
               isAlert && styles.statusTextAlert,
-              isTrip && styles.statusTextTrip,
+              !isAlert && isWorkshop && styles.statusTextWorkshop,
+              !isAlert && isTrip && styles.statusTextTrip,
             ]}
           >
             {statusText}
           </Text>
+          {/* Subline segun el estado activo: incidente / taller. */}
+          {isAlert && activeIncident ? (
+            isOpenAlert ? (
+              <Pressable
+                style={({ pressed }) => [styles.ackButton, pressed && styles.pressed]}
+                onPress={() => acknowledge.mutate(activeIncident.id)}
+                disabled={acknowledge.isPending}
+                accessibilityLabel={t('home.acknowledge')}
+              >
+                <Text style={styles.ackButtonText}>{t('home.acknowledge')}</Text>
+              </Pressable>
+            ) : (
+              <Text style={[styles.incidentSub, styles.incidentSubAlert]}>
+                {t('home.incidentAcknowledged', { kind: getEventLabel(activeIncident.kind, t) })}
+              </Text>
+            )
+          ) : isWorkshop && workshopCountdown ? (
+            <Text style={styles.incidentSub}>
+              {t('home.workshopCountdown', { time: workshopCountdown })}
+            </Text>
+          ) : null}
           <View style={styles.metaBlock}>
             <View style={styles.metaRow}>
               <Text style={styles.metaLabel}>{t('home.lastSeen')}</Text>
@@ -216,7 +268,12 @@ export function DashboardScreen() {
     geo,
     recentEvents,
     isAlert,
+    isOpenAlert,
     isTrip,
+    isWorkshop,
+    workshopCountdown,
+    activeIncident,
+    acknowledge,
     statusText,
     batteryMv,
   ]);
