@@ -1,4 +1,4 @@
-import { shouldOpenIncident } from './incident';
+import { shouldOpenIncident, TRIP_RESOLVING_KINDS } from './incident';
 
 // La regla de apertura de incidentes es el corazon de la seguridad de estado:
 // se testea pura, sin BD (igual que protocol.spec.ts).
@@ -29,5 +29,15 @@ describe('shouldOpenIncident', () => {
 
   it('en taller (WORKSHOP) no hay alerta', () => {
     expect(shouldOpenIncident('WORKSHOP', 'suspected_movement')).toBe(false);
+  });
+});
+
+describe('TRIP_RESOLVING_KINDS', () => {
+  it('autorizar viaje resuelve movimiento (presencia del dueno)', () => {
+    expect(TRIP_RESOLVING_KINDS).toContain('suspected_movement');
+  });
+
+  it('NO auto-resuelve corte de alimentacion (exige Revisado explicito)', () => {
+    expect(TRIP_RESOLVING_KINDS).not.toContain('power_lost');
   });
 });

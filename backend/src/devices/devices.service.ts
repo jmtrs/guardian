@@ -11,7 +11,7 @@ import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 import { decodeEvent, sign, verify, ProtocolError, type GuardianEvent } from './protocol';
-import { shouldOpenIncident, incidentKindFor } from './incident';
+import { shouldOpenIncident, incidentKindFor, TRIP_RESOLVING_KINDS } from './incident';
 
 export type IngestResult = {
   status: 202;
@@ -190,7 +190,16 @@ export class DevicesService {
       // dispositivo (guardada por lastSeq), asi que el findFirst+create no
       // compite consigo mismo. El incidente NO se cierra aqui: un heartbeat
       // posterior no borra la alerta (ver incident.ts).
-      if (shouldOpenIncident(device.state, event.kind)) {
+      // El estado se releer bajo el lock de la fila (ya retenido por el
+      // updateMany de lastSeq): un startTrip/endTrip concurrente puede haber
+      // cambiado state entre la lectura inicial y esta tx, y con un snapshot
+      // obsoleto un movimiento re-abriria el incidente que el "fui yo" acaba
+      // de cerrar.
+      const locked = await tx.device.findUnique({
+        where: { id: deviceId },
+        select: { state: true },
+      });
+      if (shouldOpenIncident(locked?.state ?? device.state, event.kind)) {
         const open = await tx.incident.findFirst({
           where: { deviceId, kind: incidentKindFor(event.kind), state: 'OPEN' },
           select: { id: true },
@@ -232,6 +241,13 @@ export class DevicesService {
         throw new ConflictException('Trip already active');
       }
       await tx.tripAuthorization.create({ data: { deviceId, startedBy: userId } });
+      // Autorizar viaje = presencia del dueno ("fui yo"): resuelve los incidentes
+      // que un arranque legitimo explica (ver TRIP_RESOLVING_KINDS). power_lost
+      // NO se cierra aqui. Sustituto software del reto BLE (diferido a firmware).
+      await tx.incident.updateMany({
+        where: { deviceId, state: { not: 'CLOSED' }, kind: { in: TRIP_RESOLVING_KINDS } },
+        data: { state: 'CLOSED', closedAt: new Date() },
+      });
       return tx.device.findUniqueOrThrow({ where: { id: deviceId }, select: DEVICE_PUBLIC_FIELDS });
     });
   }

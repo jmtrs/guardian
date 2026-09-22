@@ -100,6 +100,12 @@ export function createStyles(theme: UITheme) {
       borderColor: semantic.accent.dirtyAmber,
       shadowColor: semantic.accent.dirtyAmber,
     },
+    // Alerta reconocida ("Revisado"): baja de rojo a ambar. Sigue siendo un
+    // hecho activo (no cerrado), pero deja de gritar tras el reconocimiento.
+    statusPanelAck: {
+      borderColor: semantic.accent.warning,
+      shadowColor: semantic.accent.warning,
+    },
     // Placeholder animado (HUDScan / LaneStripe) tras el contenido del panel.
     statusOverlay: {
       position: 'absolute',
@@ -137,6 +143,9 @@ export function createStyles(theme: UITheme) {
     },
     statusTextWorkshop: {
       color: semantic.accent.dirtyAmber,
+    },
+    statusTextAck: {
+      color: semantic.accent.warning,
     },
     // Subline del incidente: cuenta atras de taller / estado "revisado".
     incidentSub: {

@@ -235,6 +235,8 @@ El evento se persiste antes de comunicaciones costosas para sobrevivir a reset, 
 
 Los umbrales, duración y debounce del LIS3DH se determinan con el coche real. No se fijan por intuición.
 
+Cada wake no autorizado tiene un coste energético medible: el ciclo completo wake → ventana BLE → conexión LTE → transmisión → retorno a deep sleep. Ese coste, `E_ciclo`, se mide en banco y se trata como parámetro de diseño. Escenario adversario explícito: un atacante que provoque movimiento repetido (sacudir o golpear el coche) ataca la **batería**, no la criptografía. Cualquier contramedida (debounce, agrupación de alertas, backoff acotado) se decide con `E_ciclo` medido y declara de antemano un techo máximo de retardo de alerta. La detección no se silencia jamás por debajo de ese techo: suprimir alertas no es una opción de ahorro energético.
+
 ---
 
 ## 6. Autorización de viaje: corregir el flujo actual
@@ -289,6 +291,88 @@ Debe existir una ventana transitoria `PREALERT` muy breve y medible:
 - si no llega, genera/transmite la alerta.
 
 La duración exacta se decide en pruebas para no degradar la detección antirrobo.
+
+> **Sustituto en software (implementado en PR1, sin hardware).** Mientras no exista el reto BLE, el "fui yo" del propietario se expresa autorizando el viaje desde la app (sesión autenticada). Al pulsar *Iniciar viaje*, el backend cierra automáticamente los incidentes de `suspected_movement` abiertos (`TRIP_RESOLVING_KINDS` en `backend/src/devices/incident.ts`). Esto imita el efecto del desafío BLE: presencia autenticada del dueño ⇒ el movimiento deja de ser alerta. Diferencias con el contrato final que el firmware debe cerrar:
+> - Hoy la presencia se declara con un tap manual; con firmware será el reto BLE tras el wake por LIS3DH, sin intervención.
+> - Hoy la autorización viaja por el canal backend autenticado (requiere que la app llegue al backend); el objetivo es autorización **local** BLE sin depender de Internet.
+> - `power_lost` **no** se auto-resuelve al autorizar (posible manipulación): exige *Revisado*/cierre explícito. Esta política se mantiene igual cuando llegue el firmware.
+>
+> El contrato de estados (`tripState: REQUESTED → CONFIRMED`) ya está listo para que el ACK físico sustituya la auto-confirmación del backend sin rehacer backend ni app.
+
+### Requisitos duros del reto BLE (contrato normativo para firmware)
+
+Lo siguiente es vinculante para la implementación de firmware. Convención: **debe** = requisito sin excepciones; **parámetro** = valor inicial declarado que el banco de medida puede ajustar, nunca eliminar. Nada aquí depende de LTE o cobertura: la autorización local funciona offline (§6).
+
+#### R1. Criptografía fijada
+
+- Clave: `K_ble = HKDF-SHA256(K_root, info="guardian/ble/v1", salt=deviceId)` — derivación por contexto (PR2). Prohibido reutilizar `K_event` o `K_command` en el canal BLE.
+- Autenticación mutua en 4 tramas sobre GATT:
+
+```text
+APP       --> GUARDIAN : CONNECT + solicitud de reto
+GUARDIAN  --> APP      : N_g (128 bits, CSPRNG, fresco por intento)
+APP       --> GUARDIAN : N_p (128 bits, CSPRNG) || tag
+                       tag  = HMAC-SHA256(K_ble, "auth/v1"     || N_g || N_p || deviceId)
+GUARDIAN  --> APP      : tag2 = HMAC-SHA256(K_ble, "auth-ack/v1" || N_p || N_g)
+```
+
+- El teléfono **debe** verificar `tag2`: un Guardian falso no puede suplantar al dispositivo ni cosechar respuestas del dueño.
+- `N_g` fresco en cada intento hace inútil la reproducción de un `tag` grabado (anti-replay por construcción, sin estado compartido previo).
+- Comparación de etiquetas en tiempo constante en ambos lados. Buffers de nonce y tag zeroizados tras el intercambio.
+- Una autenticación exitosa deriva `K_sess = HKDF-SHA256(K_ble, N_g || N_p)` para el resto de comandos de la sesión (`START_TRIP`, `END_TRIP`): el reto no se repite por comando.
+- La autenticación de capa de aplicación es la frontera de seguridad. El cifrado del enlace BLE (si se activa tras bonding) es endurecimiento, nunca sustituto. Prohibido depender del emparejamiento "Just Works" del stack o de la cifra del enlace como mecanismo de autenticación.
+
+#### R2. Límite de intentos por ventana
+
+- Máximo **3** etiquetas inválidas por ventana BLE. Al tercer fallo: desconexión inmediata, cierre de ventana, retorno a deep sleep. No se reabre hasta el siguiente wake físico (LIS3DH).
+- Contador acumulado de fallos persistido en NVS y expuesto en diagnóstico. No existe bloqueo permanente: el límite acota **energía y superficie de ataque**, no criptoanálisis (clave de 256 bits; fuerza bruta inviable). Un bloqueo permanente sería un vector de denegación de servicio contra el propietario.
+
+#### R3. Cota anti-relé
+
+- Guardian mide el tiempo entre el envío de `N_g` y la recepción de `tag`. Superar `T_relay` (**parámetro**, valor inicial 100 ms, validar en banco con p50/p99) descarta la trama y cierra la conexión, contabilizado como timeout (distinto de fallo criptográfico).
+- Nota honesta: un relé suficientemente rápido puede cumplir la cota; esta eleva el coste del atacante, no lo elimina. La mitigación primaria es que la app **solo** responda al reto ante un gesto explícito del usuario (*Iniciar viaje* pulsado; sin diálogo en segundo plano). RSSI y proximidad no se usan para nada (§6).
+
+#### R4. Identidad BLE no rastreable
+
+- MAC de advertising aleatoria, rotada en cada ventana. Nunca la MAC pública de fábrica.
+- El anuncio no contiene nombre, número de serie ni datos de fabricante identificativos. Descubrimiento por identificador rotatorio:
+
+```text
+RID = trunc64( HMAC-SHA256(K_ble, "rid/v1" || slot) ),  slot = epoch / 15 min
+```
+
+  La app calcula el RID esperado (slot actual y anterior) y solo conecta si coincide. Un observador externo no puede correlacionar dos ventanas del mismo vehículo; solo el dueño puede reconocerlo. El RID rota junto con `K_ble` en cada re-pairing.
+
+#### R5. Ventana acotada y presupuesto energético
+
+- Duración de ventana `T_win`: **parámetro**, valor inicial 10 s, máximo duro 30 s.
+- Corte garantizado: al llegar a `T_win` el stack BLE se desmonta y el dispositivo entra en deep sleep **aunque exista conexión activa a mitad de protocolo**. Ningún tráfico prolonga la ventana.
+- Presupuesto: ventana BLE completa ≤ **0,5 mAh** medidos desde 12 V con el banco INA219. Potencia de transmisión BLE: la mínima que cumpla fiabilidad en el coche real (**parámetro**, validar).
+- Un watchdog debe cortar cualquier flujo colgado → deep sleep + evento persistido (`window_aborted`), respetando el principio de persistir-primero (§5).
+
+#### R6. Comportamiento ante violación de protocolo (fail-closed)
+
+- Trama malformada, longitud inesperada, segunda solicitud de reto, escritura fuera de protocolo: desconexión inmediata contada como fallo (consume R2). Respuesta única genérica, sin detalles de error: el canal de error no es un oráculo.
+
+#### R7. Pairing inicial y recuperación
+
+- Credencial de un solo uso `S_pair` (256 bits) generada por backend con TTL corto, mostrada una vez (QR o entrada manual) en el acto de provisioning con presencia física (PR3).
+- `K_ble` nace solo entre las dos partes en la ventana de pairing: teléfono y Guardian se autentican mutuamente con `S_pair` (mismo formato de reto de R1, clave `S_pair`), y ambos derivan `K_ble = HKDF-SHA256(S_pair, N_a || N_b, deviceId)`. `S_pair` queda invalidada en el acto.
+- Reclamado el dispositivo, el pairing abierto se cierra. Sin reapertura remota.
+- Recuperación por móvil perdido: procedimiento físico deliberado (acceso al Guardian) + nueva `S_pair`; implica rotación de `K_ble` y revocación de credenciales anteriores. Nunca una API que entregue la clave BLE existente.
+- `K_ble` en el móvil solo en SecureStore. En el ESP32, la resistencia ante acceso físico queda condicionada a Secure Boot + Flash Encryption (§6).
+
+#### Criterios de aceptación en banco
+
+| # | Prueba | Criterio de aceptación |
+|---|--------|------------------------|
+| A1 | Reproducir un `tag` grabado de una sesión anterior | Rechazado 100/100 |
+| A2 | Clave errónea (bit alterado en `K_ble` de prueba) | `tag` inválido; 3 fallos cierran la ventana |
+| A3 | Conexión abierta sin completar el reto | Deep sleep en `T_win` ± tolerancia; sin extensión por tráfico |
+| A4 | Escáner BLE en dos ventanas consecutivas | MAC distinta; RID distinto; sin correlación externa posible |
+| A5 | Medición INA219 de la ventana completa | ≤ 0,5 mAh |
+| A6 | RTT del reto (p50/p99) con teléfono real | Medido; `T_relay` fijado con holgura sobre p99 |
+| A7 | Flujo colgado artificial (no responder tras `N_g`) | Watchdog → deep sleep + `window_aborted` persistido |
 
 ### Finalizar viaje
 

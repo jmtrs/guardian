@@ -81,10 +81,14 @@ export function DashboardScreen() {
     device?.lastBatteryMv ?? events?.find((e) => e.payload?.batteryMv != null)?.payload?.batteryMv ?? null;
 
   // La ALERTA es un incidente persistente, NO el ultimo evento: un heartbeat
-  // posterior ya no la oculta y power_lost la enciende. Ordenados desc por
-  // openedAt, el primero no cerrado es el activo. OPEN = rojo pulsante;
-  // ACKNOWLEDGED = revisado (sigue activo, sin pulso, NO desarma).
-  const activeIncident = incidents?.find((i) => i.state !== 'CLOSED') ?? null;
+  // posterior ya no la oculta y power_lost la enciende. Prioridad por estado,
+  // no por fecha: OPEN = rojo pulsante; ACKNOWLEDGED = revisado (sigue
+  // activo, sin pulso, NO desarma). Un OPEN antiguo nunca queda tapado por
+  // un incidente mas reciente ya revisado.
+  const activeIncident =
+    incidents?.find((i) => i.state === 'OPEN') ??
+    incidents?.find((i) => i.state === 'ACKNOWLEDGED') ??
+    null;
   const isAlert = Boolean(activeIncident);
   const isOpenAlert = activeIncident?.state === 'OPEN';
   const isTrip = device?.state === 'TRIP';
@@ -92,16 +96,18 @@ export function DashboardScreen() {
   const isRequesting = isTrip && device?.tripState === 'REQUESTED';
   const workshopCountdown = isWorkshop ? formatCountdown(device?.workshopUntil ?? null) : null;
 
-  // Prioridad visual: alerta > taller > viaje > armado.
-  const statusText = isAlert
+  // Prioridad visual: alerta abierta > alerta revisada > taller > viaje > armado.
+  const statusText = isOpenAlert
     ? t('home.statusAlert')
-    : isWorkshop
-      ? t('home.statusWorkshop')
-      : isTrip
-        ? isRequesting
-          ? t('home.tripRequesting')
-          : t('home.statusTrip')
-        : t('home.statusArmed');
+    : isAlert
+      ? t('home.statusAcknowledged')
+      : isWorkshop
+        ? t('home.statusWorkshop')
+        : isTrip
+          ? isRequesting
+            ? t('home.tripRequesting')
+            : t('home.statusTrip')
+          : t('home.statusArmed');
 
   const recentEvents = (events ?? []).slice(0, 3);
   const hasPosition = device?.lastLat != null && device?.lastLon != null;
@@ -194,7 +200,8 @@ export function DashboardScreen() {
         <View
           style={[
             styles.statusPanel,
-            isAlert && styles.statusPanelAlert,
+            isOpenAlert && styles.statusPanelAlert,
+            isAlert && !isOpenAlert && styles.statusPanelAck,
             !isAlert && isWorkshop && styles.statusPanelWorkshop,
             !isAlert && isTrip && styles.statusPanelTrip,
           ]}
@@ -212,7 +219,8 @@ export function DashboardScreen() {
           <Text
             style={[
               styles.statusText,
-              isAlert && styles.statusTextAlert,
+              isOpenAlert && styles.statusTextAlert,
+              isAlert && !isOpenAlert && styles.statusTextAck,
               !isAlert && isWorkshop && styles.statusTextWorkshop,
               !isAlert && isTrip && styles.statusTextTrip,
             ]}
@@ -231,8 +239,8 @@ export function DashboardScreen() {
                 <Text style={styles.ackButtonText}>{t('home.acknowledge')}</Text>
               </Pressable>
             ) : (
-              <Text style={[styles.incidentSub, styles.incidentSubAlert]}>
-                {t('home.incidentAcknowledged', { kind: getEventLabel(activeIncident.kind, t) })}
+              <Text style={[styles.incidentSub, styles.statusTextAck]}>
+                {getEventLabel(activeIncident.kind, t)}
               </Text>
             )
           ) : isWorkshop && workshopCountdown ? (
