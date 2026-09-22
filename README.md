@@ -2,6 +2,27 @@
 
 Vigilante personal independiente para un coche antiguo de 12 V: movimiento, batería principal, ubicación y alertas. **Estado actual: únicamente banco de software.** No existen todavía firmware ESP32, sensor conectado, app de autorización ni circuito de alimentación automotriz probado. **No instalar este prototipo en el coche.**
 
+## App (monorepo `backend/` + `mobile/`)
+
+Backend **NestJS + Prisma + PostgreSQL** con Better Auth (entrada por código OTP al email, sin contraseña ni teléfono) y app **Expo**. El endpoint de ingesta del dispositivo es el mismo `/v1/events` firmado con HMAC; el servidor Python queda como referencia de banco.
+
+La app móvil incluye login OTP, dashboard con recuadros reordenables (ubicación,
+eventos, estado + iniciar/finalizar viaje), mapa con rastro del viaje (OpenFreeMap,
+sin API key) y navegación a Google Maps/Waze, historial y ajustes de tema/idioma.
+Detalle y arranque de la app: **[`mobile/README.md`](mobile/README.md)**.
+
+```bash
+make setup          # pnpm install + prisma generate
+make db-start       # postgres docker
+make db-migrate     # prisma migrate dev
+node backend/scripts/seed-device.mjs   # dispositivo de banco (imprime GUARDIAN_DEVICE_KEY_HEX)
+make dev-backend    # Nest en :3000 (Swagger en /docs)
+```
+
+> **La app móvil requiere un _dev build_** (`cd mobile && pnpm android` / `pnpm ios`),
+> no Expo Go: usa módulos nativos (MapLibre, gesture-handler, reanimated). En dev el
+> código OTP es fijo `000000`. Ver [`mobile/README.md`](mobile/README.md).
+
 ## Documentación vigente
 
 - **[GUARDIAN v0.5: diseño personal, arquitectura y pantallas](docs/GUARDIAN_DISENO_PERSONAL_v0_5.md)**. Sigue siendo el diseño funcional; la antigua `docs/GUIA_PERSONAL.md` remite a este documento.
@@ -27,16 +48,18 @@ python3 -m unittest discover -s tests -v
 
 La demo abre HTTP **solo en 127.0.0.1**, crea una clave temporal aleatoria, transmite un evento de movimiento **simulado** firmado mediante HMAC-SHA256, lo guarda en SQLite y cierra el servidor. `HTTP 202` significa aceptación del backend, **no** detección real, transmisión 4G, GPS o aviso real al móvil. Los tests verifican firmas, eventos malformados, rechazo de repetición y peticiones no autorizadas.
 
-Para ejecutar servidor y simulador por separado, usa una clave individual de laboratorio **fuera del repositorio**:
+Para ejecutar la simulación contra el **backend Nest real** (mismo protocolo firmado):
 
 ```bash
-export GUARDIAN_DEVICE_KEY_HEX="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
-export GUARDIAN_DEVICE_ID=guardian-lab-01
-python3 -m guardian.server &
-SERVER_PID=$!
+make db-start && make db-migrate
+node backend/scripts/seed-device.mjs   # imprime GUARDIAN_DEVICE_KEY_HEX
+# (copia los dos export que imprime)
+make dev-backend &
 python3 -m guardian.simulator --kind suspected_movement
-kill "$SERVER_PID"
+# HTTP 202 aceptado | 409 replay | 401 firma mala | 400 envelope invalido
 ```
+
+El simulador también sigue funcionando contra el servidor Python de banco (`python3 -m guardian.server`, puerto 8765) con `GUARDIAN_INGEST_URL=http://127.0.0.1:8765/v1/events`.
 
 Ambos procesos deben heredar exactamente la misma clave. No exponer HTTP local a Internet ni reutilizar claves de demo en hardware real. Telegram opcional necesita credenciales propias; no consta entrega verificada a una cuenta real.
 

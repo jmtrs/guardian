@@ -26,3 +26,45 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Local simulation smoke test
         run: python -m guardian.demo
+
+  backend:
+    name: Backend (NestJS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Prisma generate
+        run: pnpm --filter backend exec prisma generate
+      - name: Typecheck
+        run: pnpm --filter backend exec tsc --noEmit
+      - name: Unit tests
+        run: pnpm --filter backend run test
+      - name: Build
+        run: pnpm --filter backend run build
+
+  mobile:
+    name: Mobile (Expo)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm --filter mobile exec tsc --noEmit
+      - name: Unit tests
+        run: pnpm --filter mobile run test

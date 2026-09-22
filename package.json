@@ -1,0 +1,64 @@
+{
+  "name": "guardian",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Guardian: vigilante autonomo para vehiculo 12V con app movil",
+  "scripts": {
+    "dev:backend": "pnpm --filter backend run start:dev",
+    "dev:mobile": "pnpm --filter mobile run start",
+    "dev": "node scripts/dev.js",
+
+    "build": "pnpm run build:backend",
+    "build:backend": "pnpm --filter backend run build",
+
+    "test": "pnpm run test:backend && pnpm run test:mobile",
+    "test:backend": "pnpm --filter backend run test",
+    "test:mobile": "pnpm --filter mobile run test",
+    "test:python": "python3 -m pytest tests/ -q",
+    "lint": "pnpm --filter backend run lint && pnpm --filter mobile run lint",
+    "typecheck": "pnpm --filter backend exec tsc --noEmit && pnpm --filter mobile exec tsc --noEmit",
+
+    "db:start": "docker compose up -d",
+    "db:stop": "docker compose down",
+    "db:migrate": "pnpm --filter backend exec prisma migrate dev",
+    "db:deploy": "pnpm --filter backend exec prisma migrate deploy",
+    "db:studio": "pnpm --filter backend exec prisma studio",
+    "db:generate": "pnpm --filter backend exec prisma generate",
+
+    "setup": "node scripts/setup.js",
+    "storybook": "pnpm --filter mobile run storybook",
+    "storybook:web": "pnpm --filter mobile run storybook:web",
+    "build:storybook": "pnpm --filter mobile run build:storybook",
+    "test:storybook": "pnpm --filter mobile run test:storybook",
+    "clean": "node scripts/clean.js",
+    "kill:ports": "node scripts/kill-port.js",
+    "kill:backend": "node scripts/kill-port.js 3000",
+    "kill:mobile": "node scripts/kill-port.js 8081"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "pnpm@10.12.4",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "@nestjs/core",
+      "better-auth"
+    ]
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{js,json,md}": [
+      "prettier --write"
+    ]
+  }
+}
