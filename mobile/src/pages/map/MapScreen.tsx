@@ -95,7 +95,7 @@ export function MapScreen() {
         style={styles.map}
         mapStyle={MAP_STYLE}
         logo={false}
-        attribution={false}
+        attribution={true}
         compass={false}
         onDidFinishLoadingStyle={() => setMapReady(true)}
       >
