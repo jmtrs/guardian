@@ -120,8 +120,10 @@ enum CommandStatus {
 model Device {
   id         String      @id @default(cuid())
   name       String
-  // Clave raiz HMAC del dispositivo (K_root). Va en claro porque verifica
-  // firmas en cada request; cifrado en reposo: PR3 (previo a Internet).
+  // Clave raiz HMAC del dispositivo (K_root). Cifrada en reposo con AES-256-GCM
+  // (master key en env GUARDIAN_SECRET_KEY, fuera de la BD): formato
+  // `enc:v1:iv:tag:ct`. Ver src/devices/secret-crypto.ts. Los secretos legado
+  // en claro (sin prefijo) siguen validando y se re-cifran al reescribirse.
   secret     String
   ownerId    String
   owner      User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)

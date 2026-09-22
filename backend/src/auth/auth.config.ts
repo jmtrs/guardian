@@ -4,6 +4,8 @@ import { emailOTP } from 'better-auth/plugins';
 import { expo } from '@better-auth/expo';
 import type { PrismaClient } from '@prisma/client';
 
+import { trustedOrigins } from '../config/origins';
+
 /**
  * Tipo estructural: solo exponemos lo que usamos (handler Web + api).
  * Evita TS2742 al inferir el tipo completo de betterAuth (arrastra zod interno).
@@ -34,23 +36,9 @@ export function createAuth(prisma: PrismaClient, baseUrl: string, secret: string
     }),
     baseURL: baseUrl,
     secret,
-    trustedOrigins: [
-      'http://localhost:3000',
-      'http://localhost:8081',
-      'http://127.0.0.1:8081',
-      // Dev build (dev-client / produccion): el fetch nativo manda Origin
-      // con el scheme de la app (app.json -> expo.scheme). El plugin expo()
-      // no siempre lo registra, asi que lo listamos explicitamente.
-      'guardian://',
-      // Expo Go via adb reverse: Origin es exp://127.0.0.1:8081.
-      'exp://127.0.0.1:8081',
-      'exp://localhost:8081',
-      // Expo Go en LAN: exp://IP:8081 — pasar por TRUSTED_ORIGINS (coma-separado).
-      ...(process.env.TRUSTED_ORIGINS ?? '')
-        .split(',')
-        .map((origin) => origin.trim())
-        .filter(Boolean),
-    ],
+    // Fuente unica compartida con CORS (main.ts): en produccion solo el scheme
+    // de la app y lo declarado en TRUSTED_ORIGINS; en dev, ademas el bloque local.
+    trustedOrigins: trustedOrigins(),
     emailAndPassword: {
       // Sin password: entrada solo por codigo OTP al email.
       enabled: false,

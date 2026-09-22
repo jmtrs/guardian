@@ -25,6 +25,7 @@ import {
   incidentKindFor,
   TRIP_RESOLVING_KINDS,
 } from './incident';
+import { encryptSecret, decryptSecret } from './secret-crypto';
 
 export type IngestResult = {
   status: 202;
@@ -75,7 +76,9 @@ export class DevicesService {
   async createDevice(ownerId: string, name: string) {
     const secret = randomBytes(32).toString('hex');
     const device = await this.prisma.device.create({
-      data: { name, secret, ownerId },
+      // Cifrado en reposo: en la BD nunca queda el K_root en claro (con master
+      // key configurada). El secreto en claro solo se devuelve aqui, una vez.
+      data: { name, secret: encryptSecret(secret), ownerId },
       select: DEVICE_PUBLIC_FIELDS,
     });
     // El secreto viaja una sola vez, en la creacion.
@@ -179,8 +182,9 @@ export class DevicesService {
   async ingest(deviceId: string, rawBody: Buffer, signature: string): Promise<IngestResult> {
     const device = await this.prisma.device.findUnique({ where: { id: deviceId } });
     // Coste uniforme: un deviceId desconocido paga el mismo HKDF+HMAC que uno
-    // valido (clave señuelo), para que la 401 tampoco enumere por tiempo.
-    const key = deriveKey(device?.secret ?? DUMMY_ROOT_SECRET, deviceId, 'event');
+    // valido (clave señuelo), para que la 401 tampoco enumere por tiempo. El
+    // secreto se descifra en memoria; el señuelo (sin prefijo) pasa tal cual.
+    const key = deriveKey(decryptSecret(device?.secret ?? DUMMY_ROOT_SECRET), deviceId, 'event');
     if (!device || !verify(rawBody, key, signature)) {
       // 401 uniforme: no permitir enumerar deviceIds validos.
       throw new UnauthorizedException('Bad signature');
@@ -474,7 +478,7 @@ export class DevicesService {
   async pollCommands(deviceId: string, rawBody: Buffer, signature: string) {
     const device = await this.prisma.device.findUnique({ where: { id: deviceId } });
     // Mismo coste uniforme que ingest: la 401 no enumera por mensaje ni por tiempo.
-    const key = deriveKey(device?.secret ?? DUMMY_ROOT_SECRET, deviceId, 'command');
+    const key = deriveKey(decryptSecret(device?.secret ?? DUMMY_ROOT_SECRET), deviceId, 'command');
     if (!device || !verify(rawBody, key, signature)) {
       // 401 uniforme como ingest: no permitir enumerar deviceIds validos.
       throw new UnauthorizedException('Bad signature');
