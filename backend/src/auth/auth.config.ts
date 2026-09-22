@@ -68,12 +68,13 @@ export function createAuth(prisma: PrismaClient, baseUrl: string, secret: string
           ? { generateOTP: () => '000000' }
           : {}),
         async sendVerificationOTP({ email, otp, type }) {
-          if (process.env.NODE_ENV === 'production' && !process.env.RESEND_API_KEY) {
-            // Nunca filtrar el OTP a logs de produccion sin transporte real.
-            throw new Error('Email delivery not configured: set RESEND_API_KEY');
+          if (process.env.NODE_ENV === 'production') {
+            // Fail closed until a real mail transport is implemented. Never put
+            // authentication codes in production logs, even if a provider key
+            // happens to be configured.
+            throw new Error('Production OTP delivery is not implemented');
           }
-          // Dev: codigo por consola (sin coste).
-          // Produccion: TODO enviar via Resend cuando RESEND_API_KEY este listo.
+          // Development only: fixed OTP and console output keep local iteration cheap.
           // eslint-disable-next-line no-console
           console.log(`[Guardian OTP] ${type} -> ${email}: ${otp}`);
         },
