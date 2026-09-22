@@ -7,11 +7,24 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { randomBytes } from 'crypto';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
-import { decodeEvent, sign, verify, ProtocolError, type GuardianEvent } from './protocol';
-import { shouldOpenIncident, incidentKindFor, TRIP_RESOLVING_KINDS } from './incident';
+import {
+  decodeEvent,
+  decodePollRequest,
+  deriveKey,
+  sign,
+  verify,
+  ProtocolError,
+  type GuardianEvent,
+} from './protocol';
+import {
+  shouldOpenIncident,
+  shouldCloseAcknowledged,
+  incidentKindFor,
+  TRIP_RESOLVING_KINDS,
+} from './incident';
 
 export type IngestResult = {
   status: 202;
@@ -31,10 +44,21 @@ const DEVICE_PUBLIC_FIELDS = {
   lastLat: true,
   lastLon: true,
   lastFixAt: true,
-  lastBatteryMv: true,
+  lastVehicleMv: true,
+  lastReserveMv: true,
+  lastPowerSource: true,
   createdAt: true,
   updatedAt: true,
 } as const;
+
+// TTL corto del LOCATE_NOW (docs v0.6): sin canal de wake real (diferido a
+// firmware), un comando que nadie recoge debe morir pronto y en silencio.
+const LOCATE_TTL_MS = 120_000;
+
+// Raiz señuelo para deviceIds desconocidos: verificar contra ella nunca pasa,
+// pero iguala el coste HKDF+HMAC del camino valido (anti enumeracion por
+// tiempo de respuesta, no solo por mensaje de error).
+const DUMMY_ROOT_SECRET = '00'.repeat(32);
 
 export type DevicePosition = {
   lat: number;
@@ -93,11 +117,40 @@ export class DevicesService {
    * Prisma no filtra bien dentro del JSON payload, asi que traemos los ultimos
    * eventos y filtramos en memoria (volumen acotado por `limit`). Se devuelve
    * en orden cronologico ascendente para dibujar la polyline del viaje.
+   *
+   * Ambito (PR2): con incidentId/tripId el rastro se acota a ese hecho
+   * concreto, no a "las ultimas N posiciones mezcladas" — el mapa de un
+   * incidente muestra el movimiento desde ese incidente, nada anterior.
    */
-  async listPositions(deviceId: string, ownerId: string, limit = 50): Promise<DevicePosition[]> {
+  async listPositions(
+    deviceId: string,
+    ownerId: string,
+    limit = 50,
+    scope?: { incidentId?: string; tripId?: string },
+  ): Promise<DevicePosition[]> {
     const take = Math.min(Math.max(limit, 1), 200);
+    const where: Prisma.DeviceEventWhereInput = { device: { id: deviceId, ownerId } };
+    if (scope?.incidentId) {
+      const incident = await this.prisma.incident.findFirst({
+        where: { id: scope.incidentId, device: { id: deviceId, ownerId } },
+      });
+      if (!incident) {
+        throw new NotFoundException('Incident not found');
+      }
+      // Cota por secuencia, no por reloj: openedByEventSeq viene del propio
+      // canal del dispositivo, inmune al skew entre reloj del vehiculo y servidor.
+      where.seq = { gte: incident.openedByEventSeq };
+    } else if (scope?.tripId) {
+      const trip = await this.prisma.tripAuthorization.findFirst({
+        where: { id: scope.tripId, deviceId },
+      });
+      if (!trip) {
+        throw new NotFoundException('Trip not found');
+      }
+      where.observedAt = { gte: trip.startedAt, lte: trip.endedAt ?? undefined };
+    }
     const events = await this.prisma.deviceEvent.findMany({
-      where: { device: { id: deviceId, ownerId } },
+      where,
       orderBy: { observedAt: 'desc' },
       take,
     });
@@ -120,17 +173,16 @@ export class DevicesService {
 
   /**
    * Ingest del dispositivo: verify HMAC sobre bytes crudos -> decode -> anti-replay.
-   * Espejo de guardian/server.py: 202 aceptado, 401 firma, 409 replay,
+   * 202 aceptado, 401 firma, 409 replay,
    * 404 desconocido, 400 envelope invalido.
    */
   async ingest(deviceId: string, rawBody: Buffer, signature: string): Promise<IngestResult> {
     const device = await this.prisma.device.findUnique({ where: { id: deviceId } });
-    if (!device) {
-      // 401 uniforme como server.py: no permitir enumerar deviceIds validos.
-      throw new UnauthorizedException('Bad signature');
-    }
-
-    if (!verify(rawBody, Buffer.from(device.secret, 'hex'), signature)) {
+    // Coste uniforme: un deviceId desconocido paga el mismo HKDF+HMAC que uno
+    // valido (clave señuelo), para que la 401 tampoco enumere por tiempo.
+    const key = deriveKey(device?.secret ?? DUMMY_ROOT_SECRET, deviceId, 'event');
+    if (!device || !verify(rawBody, key, signature)) {
+      // 401 uniforme: no permitir enumerar deviceIds validos.
       throw new UnauthorizedException('Bad signature');
     }
 
@@ -139,7 +191,7 @@ export class DevicesService {
       event = decodeEvent(rawBody, deviceId);
     } catch (error) {
       if (error instanceof ProtocolError) {
-        // Mismo mapping que guardian/server.py: invalid_event -> 400
+        // ProtocolError -> 400 (invalid_event)
         throw new BadRequestException(error.message);
       }
       throw error;
@@ -158,9 +210,11 @@ export class DevicesService {
         deviceUpdate.lastLon = event.position.lon;
         deviceUpdate.lastFixAt = new Date(event.position.fixAtUtc);
       }
-      if (event.batteryMv != null) {
-        deviceUpdate.lastBatteryMv = event.batteryMv;
-      }
+      // Telemetria de energia: siempre presente (contrato v2), con semantica
+      // fisica — rail del vehiculo vs reserva interna del Guardian.
+      deviceUpdate.lastVehicleMv = event.power.vehicleMv;
+      deviceUpdate.lastReserveMv = event.power.reserveMv;
+      deviceUpdate.lastPowerSource = event.power.source;
 
       // Anti-replay atomico: solo avanza lastSeq si el evento es nuevo.
       const advanced = await tx.device.updateMany({
@@ -171,25 +225,44 @@ export class DevicesService {
         throw new ConflictException('Replayed or stale sequence');
       }
 
-      await tx.deviceEvent.create({
+      const createdEvent = await tx.deviceEvent.create({
         data: {
           deviceId,
           seq: event.sequence,
           kind: event.kind,
           observedAt: new Date(event.observedAtUtc),
           payload: {
-            batteryMv: event.batteryMv ?? null,
+            power: event.power,
+            commandId: event.commandId ?? null,
             position: event.position ?? null,
           } as unknown as Prisma.DeviceEventUpdateInput['payload'],
         },
       });
 
+      // ACK del comando: el gnss_fix llega con el commandId que lo pidio.
+      // Solo resucita un PENDING no expirado y solo del tipo que espera un
+      // fix como ACK — un fix tardio sobre un comando ya muerto guarda la
+      // posicion (vale por si misma) pero no correlaciona. Sin posicion no
+      // hay ACK: seria confirmar una localizacion que no existe.
+      if (event.commandId && event.position) {
+        await tx.command.updateMany({
+          where: {
+            id: event.commandId,
+            deviceId,
+            type: 'LOCATE_NOW',
+            status: 'PENDING',
+            expiresAt: { gt: new Date() },
+          },
+          data: { status: 'ACKED', ackedAt: new Date(), resultEventId: createdEvent.id },
+        });
+      }
+
       // Alerta como hecho persistente: si el evento es de alerta y el
       // dispositivo esta ARMED, abrimos incidente. Idempotente: un unico
       // incidente OPEN por (deviceId, kind). Esta tx es de escritor unico por
       // dispositivo (guardada por lastSeq), asi que el findFirst+create no
-      // compite consigo mismo. El incidente NO se cierra aqui: un heartbeat
-      // posterior no borra la alerta (ver incident.ts).
+      // compite consigo mismo. Un incidente OPEN nunca se cierra aqui: un
+      // heartbeat posterior no borra la alerta (ver incident.ts).
       // El estado se releer bajo el lock de la fila (ya retenido por el
       // updateMany de lastSeq): un startTrip/endTrip concurrente puede haber
       // cambiado state entre la lectura inicial y esta tx, y con un snapshot
@@ -215,13 +288,25 @@ export class DevicesService {
         }
       }
 
+      // Recuperacion observada de energia: un incidente power_lost YA REVISADO
+      // (ACKNOWLEDGED) se cierra cuando un evento posterior re-observa la
+      // alimentacion del vehiculo (source='vehicle'). La regla vive en
+      // shouldCloseAcknowledged; el where materializa estado y kind. Nunca
+      // toca un OPEN (eso exige Revisado). Cierre trazado con su seq.
+      if (shouldCloseAcknowledged('ACKNOWLEDGED', 'power_lost', event.power.source)) {
+        await tx.incident.updateMany({
+          where: { deviceId, state: 'ACKNOWLEDGED', kind: 'power_lost' },
+          data: { state: 'CLOSED', closedAt: new Date(), closedByEventSeq: event.sequence },
+        });
+      }
+
       return { status: 202 as const, sequence: event.sequence };
     });
   }
 
-  /** Firmar un evento (para tests e2e y simulador TS si hace falta). */
-  signForTest(body: Buffer, secretHex: string): string {
-    return sign(body, Buffer.from(secretHex, 'hex'));
+  /** Firmar un evento con K_event (para tests e2e y simulador TS si hace falta). */
+  signForTest(body: Buffer, secretHex: string, deviceId: string): string {
+    return sign(body, deriveKey(secretHex, deviceId, 'event'));
   }
 
   async startTrip(deviceId: string, userId: string) {
@@ -304,5 +389,108 @@ export class DevicesService {
       throw new NotFoundException('Open incident not found');
     }
     return this.prisma.incident.findUniqueOrThrow({ where: { id: incidentId } });
+  }
+
+  // ============ Canal de comandos backend -> dispositivo (PR2) ============
+
+  /** Expiracion lazy: los PENDING caducados mueren al leerse, sin cron. */
+  private async expireStaleCommands(deviceId: string) {
+    await this.prisma.command.updateMany({
+      where: { deviceId, status: 'PENDING', expiresAt: { lte: new Date() } },
+      data: { status: 'EXPIRED' },
+    });
+  }
+
+  /**
+   * LOCATE_NOW: pide una posicion fresca. Reutiliza el PENDING vivo en vez de
+   * encolar otro (la UI ademas deshabilita el boton mientras espera). El
+   * get-or-create va en transaccion serializable: dos requestLocate
+   * concurrentes no pueden colarse entre el read y el create — uno aborta
+   * (P2034), reintenta y se encuentra el PENDING del ganador.
+   */
+  async requestLocate(deviceId: string, ownerId: string) {
+    await this.requireOwnedDevice(deviceId, ownerId);
+    await this.expireStaleCommands(deviceId);
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.prisma.$transaction(
+          async (tx) => {
+            // Solo cuenta como vivo el que no ha expirado ya: uno que vencio
+            // entre el expireStale y esta lectura es un muerto, no se reutiliza.
+            const existing = await tx.command.findFirst({
+              where: {
+                deviceId,
+                type: 'LOCATE_NOW',
+                status: 'PENDING',
+                expiresAt: { gt: new Date() },
+              },
+              orderBy: { createdAt: 'desc' },
+            });
+            if (existing) {
+              return existing;
+            }
+            return tx.command.create({
+              data: {
+                deviceId,
+                type: 'LOCATE_NOW',
+                expiresAt: new Date(Date.now() + LOCATE_TTL_MS),
+              },
+            });
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+      } catch (error) {
+        // Conflicto de serializacion (get-or-create corrido): reintenta una
+        // vez y encuentra el comando del ganador; a la segunda, error real.
+        if (
+          attempt === 0 &&
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2034'
+        ) {
+          continue;
+        }
+        throw error;
+      }
+    }
+  }
+
+  /** Vista del dueño: historial de comandos con expiracion lazy aplicada. */
+  async listCommands(deviceId: string, ownerId: string) {
+    await this.requireOwnedDevice(deviceId, ownerId);
+    await this.expireStaleCommands(deviceId);
+    return this.prisma.command.findMany({
+      where: { device: { id: deviceId, ownerId } },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+  }
+
+  /**
+   * Poll del dispositivo: que comandos tengo pendientes. Autenticado con
+   * K_command (el canal de eventos usa K_event; jamas se comparte clave).
+   * El wake best-effort es diferido a firmware: aqui el dispositivo ya esta
+   * despierto y pregunta — despertar nunca fue autorizar (docs v0.6 S8).
+   */
+  async pollCommands(deviceId: string, rawBody: Buffer, signature: string) {
+    const device = await this.prisma.device.findUnique({ where: { id: deviceId } });
+    // Mismo coste uniforme que ingest: la 401 no enumera por mensaje ni por tiempo.
+    const key = deriveKey(device?.secret ?? DUMMY_ROOT_SECRET, deviceId, 'command');
+    if (!device || !verify(rawBody, key, signature)) {
+      // 401 uniforme como ingest: no permitir enumerar deviceIds validos.
+      throw new UnauthorizedException('Bad signature');
+    }
+    try {
+      decodePollRequest(rawBody, deviceId);
+    } catch (error) {
+      if (error instanceof ProtocolError) {
+        throw new BadRequestException(error.message);
+      }
+      throw error;
+    }
+    await this.expireStaleCommands(deviceId);
+    return this.prisma.command.findMany({
+      where: { deviceId, status: 'PENDING', expiresAt: { gt: new Date() } },
+      orderBy: { createdAt: 'asc' },
+    });
   }
 }

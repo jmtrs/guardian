@@ -103,11 +103,25 @@ enum IncidentState {
   CLOSED // cerrado explicitamente
 }
 
+// Canal backend -> dispositivo (PR2). La orden viaja SIEMPRE por este canal
+// autenticado; cualquier senal de wake es best-effort y diferida a firmware
+// (docs v0.6 S8): despertar no es autorizar. El dispositivo hace poll con
+// K_command; el ACK es el gnss_fix que llega por /v1/events con commandId.
+enum CommandType {
+  LOCATE_NOW
+}
+
+enum CommandStatus {
+  PENDING // creado, esperando que el dispositivo lo recoja y responda
+  ACKED // gnss_fix recibido con su commandId (resultEventId apunta al evento)
+  EXPIRED // TTL agotado sin respuesta (expiracion lazy al leer)
+}
+
 model Device {
   id         String      @id @default(cuid())
   name       String
-  // Clave HMAC del dispositivo. Necesaria en claro para verificar firmas
-  // del envelope (protocol.py). TODO v1.x: cifrar en reposo.
+  // Clave raiz HMAC del dispositivo (K_root). Va en claro porque verifica
+  // firmas en cada request; cifrado en reposo: PR3 (previo a Internet).
   secret     String
   ownerId    String
   owner      User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
@@ -119,16 +133,21 @@ model Device {
   lastSeq    Int         @default(0)
   lastSeenAt DateTime?
   // Ultimo estado denormalizado: evita escanear device_events para la
-  // "ultima posicion/bateria conocida" (dashboard + preview de mapa).
+  // "ultima posicion/energia conocida" (dashboard + preview de mapa).
   lastLat       Float?
   lastLon       Float?
   lastFixAt     DateTime?
-  lastBatteryMv Int?
+  // Telemetria de energia (protocolo v2, siempre presente en cada evento):
+  // rail del vehiculo, reserva interna del Guardian y cual alimenta ahora.
+  lastVehicleMv     Int?
+  lastReserveMv Int?
+  lastPowerSource String?
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
   events     DeviceEvent[]
   trips      TripAuthorization[]
   incidents  Incident[]
+  commands   Command[]
 
   @@map("devices")
 }
@@ -148,12 +167,15 @@ model Incident {
   acknowledgedAt    DateTime?
   closedAt          DateTime?
   openedByEventSeq  Int // seq del evento que lo abrio (trazabilidad)
+  // seq del evento que lo cerro (cierre por recuperacion observada); null si
+  // el cierre fue manual (closeIncident) o por autorizacion de viaje.
+  closedByEventSeq  Int?
 
   @@index([deviceId, state])
   @@map("incidents")
 }
 
-// kinds (protocol.py ALLOWED_TYPES):
+// kinds (ALLOWED_TYPES del contrato v2):
 // suspected_movement | battery_low | power_lost | heartbeat | gnss_fix
 model DeviceEvent {
   id         String   @id @default(cuid())
@@ -180,4 +202,23 @@ model TripAuthorization {
 
   @@index([deviceId, startedAt])
   @@map("trip_authorizations")
+}
+
+// Comando hacia el dispositivo (ver enum CommandType). Un unico LOCATE_NOW
+// PENDING por dispositivo lo garantiza el servicio, no un unique index: el
+// estado de carrera se cierra con updateMany/create dentro de tx corta.
+model Command {
+  id            String        @id @default(cuid())
+  deviceId      String
+  device        Device        @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  type          CommandType
+  status        CommandStatus @default(PENDING)
+  createdAt     DateTime      @default(now())
+  expiresAt     DateTime
+  ackedAt       DateTime?
+  // gnss_fix que resolvio el comando (correlacion por commandId).
+  resultEventId String?
+
+  @@index([deviceId, status])
+  @@map("commands")
 }

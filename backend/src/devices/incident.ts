@@ -10,13 +10,34 @@ const ALERT_KINDS = new Set<string>(['suspected_movement', 'power_lost']);
  *   - Solo con el dispositivo ARMED (durante TRIP autorizado no hay alerta).
  *   - Solo para tipos de alerta (movimiento / corte de energia).
  *
- * NOTA de seguridad: no existe funcion inversa "cerrar por evento". El ingest
- * nunca cierra un incidente; un heartbeat posterior no lo borra. Solo el dueno
- * lo reconoce (ACKNOWLEDGED) o lo cierra (CLOSED). El anti-robo exige que la
- * alerta sea un hecho persistente, no el reflejo del ultimo evento recibido.
+ * NOTA de seguridad: no existe funcion inversa "cerrar por evento" sobre un
+ * incidente OPEN. El ingest nunca silencia una alerta sin reviso humano; un
+ * heartbeat posterior no la borra. Lo unico que avanza un OPEN es el dueno
+ * (Revisado). El anti-robo exige que la alerta sea un hecho persistente, no
+ * el reflejo del ultimo evento recibido.
  */
 export function shouldOpenIncident(state: DeviceState, kind: string): boolean {
   return state === 'ARMED' && ALERT_KINDS.has(kind);
+}
+
+/**
+ * Cierre por recuperacion OBSERVADA — solo sobre incidentes ya revisados.
+ * Una vez el dueno conoce el corte (ACKNOWLEDGED), un evento posterior que
+ * re-observa la alimentacion del vehiculo (power.source='vehicle') certifica
+ * que la condicion que abrio el incidente ya no existe: cerrar es honesto y
+ * queda trazado con closedByEventSeq. Sobre OPEN nunca actua: eso seria
+ * auto-resolver una alerta sin reviso humano (invariante de arriba).
+ */
+export function shouldCloseAcknowledged(
+  incidentState: 'ACKNOWLEDGED' | 'CLOSED' | 'OPEN',
+  incidentKind: IncidentKind,
+  powerSource: string,
+): boolean {
+  return (
+    incidentState === 'ACKNOWLEDGED' &&
+    incidentKind === 'power_lost' &&
+    powerSource === 'vehicle'
+  );
 }
 
 /** El kind del evento como IncidentKind (solo valido si shouldOpenIncident). */

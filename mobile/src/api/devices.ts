@@ -4,6 +4,14 @@ import { apiClient } from './client';
 
 export type DeviceState = 'ARMED' | 'TRIP' | 'WORKSHOP';
 export type TripState = 'IDLE' | 'REQUESTED' | 'CONFIRMED';
+export type PowerSource = 'vehicle' | 'reserve' | 'unknown';
+
+/** Espejo de PowerTelemetry del backend (protocol v2). */
+export type PowerTelemetry = {
+  vehicleMv: number;
+  reserveMv: number | null;
+  source: PowerSource;
+};
 
 export type Device = {
   id: string;
@@ -17,7 +25,11 @@ export type Device = {
   lastLat: number | null;
   lastLon: number | null;
   lastFixAt: string | null;
-  lastBatteryMv: number | null;
+  /** Telemetria de energia (protocolo v2): rail del vehiculo, reserva
+   * interna y cual alimenta ahora. Siempre presente tras el primer evento. */
+  lastVehicleMv: number | null;
+  lastReserveMv: number | null;
+  lastPowerSource: PowerSource | null;
   createdAt: string;
   updatedAt: string;
   trips?: TripAuthorization[];
@@ -35,6 +47,8 @@ export type Incident = {
   acknowledgedAt: string | null;
   closedAt: string | null;
   openedByEventSeq: number;
+  /** Evento que cerro por recuperacion observada (null: cierre manual/viaje). */
+  closedByEventSeq: number | null;
 };
 
 export type DevicePosition = {
@@ -61,9 +75,27 @@ export type DeviceEvent = {
   observedAt: string;
   receivedAt: string;
   payload: {
-    batteryMv: number | null;
+    power: PowerTelemetry;
+    /** Solo gnss_fix: comando LOCATE_NOW que pidio el fix. */
+    commandId?: string | null;
     position: { lat: number; lon: number; fixAtUtc: string } | null;
   } | null;
+};
+
+// ============ Canal de comandos (PR2): LOCATE_NOW ============
+
+export type CommandType = 'LOCATE_NOW';
+export type CommandStatus = 'PENDING' | 'ACKED' | 'EXPIRED';
+
+export type Command = {
+  id: string;
+  deviceId: string;
+  type: CommandType;
+  status: CommandStatus;
+  createdAt: string;
+  expiresAt: string;
+  ackedAt: string | null;
+  resultEventId: string | null;
 };
 
 export const deviceKeys = {
@@ -71,7 +103,12 @@ export const deviceKeys = {
   events: (deviceId: string) => ['devices', deviceId, 'events'] as const,
   positions: (deviceId: string) => ['devices', deviceId, 'positions'] as const,
   incidents: (deviceId: string) => ['devices', deviceId, 'incidents'] as const,
+  commands: (deviceId: string) => ['devices', deviceId, 'commands'] as const,
 };
+
+/** Acota el rastro de posiciones a un contexto: incidente (desde que abrio)
+ * o viaje (entre startedAt/endedAt). El backend rechaza ids ajenos. */
+export type PositionsScope = { incidentId?: string; tripId?: string };
 
 export function useDevices(options?: { refetchInterval?: number }) {
   return useQuery({
@@ -106,13 +143,15 @@ export function useDevicePositions(
   deviceId: string | undefined,
   limit = 50,
   options?: { refetchInterval?: number },
+  scope?: PositionsScope,
 ) {
+  const scopeKey = scope?.incidentId ?? scope?.tripId ?? 'all';
   return useQuery({
-    queryKey: deviceKeys.positions(deviceId ?? 'none'),
+    queryKey: [...deviceKeys.positions(deviceId ?? 'none'), scopeKey],
     queryFn: async () => {
       const response = await apiClient.get<DevicePosition[]>(
         `/v1/devices/${deviceId}/positions`,
-        { params: { limit } },
+        { params: { limit, ...(scope?.incidentId && { incidentId: scope.incidentId }), ...(scope?.tripId && { tripId: scope.tripId }) } },
       );
       return response.data;
     },
@@ -131,6 +170,40 @@ export function useIncidents(deviceId: string | undefined, options?: { refetchIn
     },
     enabled: Boolean(deviceId),
     refetchInterval: options?.refetchInterval,
+  });
+}
+
+// Historial de comandos (LOCATE_NOW). Mientras haya un PENDING vivo el refetch
+// es rapido: es la unica forma de ver el ACK del dispositivo (llega como fix).
+export function useDeviceCommands(deviceId: string | undefined, options?: { refetchInterval?: number }) {
+  return useQuery({
+    queryKey: deviceKeys.commands(deviceId ?? 'none'),
+    queryFn: async () => {
+      const response = await apiClient.get<Command[]>(`/v1/devices/${deviceId}/commands`);
+      return response.data;
+    },
+    enabled: Boolean(deviceId),
+    refetchInterval: options?.refetchInterval,
+  });
+}
+
+// "Actualizar ubicacion": pide un LOCATE_NOW. El backend reutiliza un PENDING
+// vivo (idempotente), asi que doubles-tap no spamea comandos. El ACK no ocurre
+// aqui: llega cuando el dispositivo manda el gnss_fix con commandId; invalidamos
+// devices+commands para que el polling los recoja.
+export function useRequestLocate(deviceId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const response = await apiClient.post<Command>(`/v1/devices/${deviceId}/commands/locate`);
+      return response.data;
+    },
+    onSettled: () => {
+      if (deviceId) {
+        queryClient.invalidateQueries({ queryKey: deviceKeys.commands(deviceId) });
+        queryClient.invalidateQueries({ queryKey: deviceKeys.all });
+      }
+    },
   });
 }
 
