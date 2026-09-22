@@ -60,8 +60,9 @@ El banco Python continúa siendo útil como implementación de referencia y simu
 
 ### Huecos encontrados que v0.6 debe resolver
 
-> Estado a septiembre de 2026: los huecos 2, 7, 9 y 10 están resueltos e implementados
-> (PR1 + PR2); el resto siguen abiertos. El contrato vigente entre placa, backend y app
+> Estado a septiembre de 2026: los huecos 2, 7, 9 y 10 están resueltos (PR1 + PR2); los
+> huecos 4, 5 y 11 están resueltos y el 6 mitigado (PR3, endurecimiento de despliegue y
+> privacidad); el resto siguen abiertos. El contrato vigente entre placa, backend y app
 > es `docs/CONTRATO_DISPOSITIVO_v0_6.md`. Visión de las cinco capas y recorrido de un dato
 > de punta a punta: `docs/MAPA_CONEXION_SISTEMA.md`.
 
@@ -74,14 +75,14 @@ El banco Python continúa siendo útil como implementación de referencia y simu
 3. **No existe wake remoto validado.**  
    La T-A7670E dispone de señales de módem útiles para sleep/wake, pero el método exacto, consumo y comportamiento con nuestra revisión y ruta de alimentación deben medirse.
 
-4. **El secreto HMAC se almacena actualmente en claro en PostgreSQL.**  
-   El propio schema lo marca como TODO. Es aceptable para banco local, no para un backend expuesto.
+4. ~~**El secreto HMAC se almacena en claro en PostgreSQL.**~~ **Resuelto (PR3).**  
+   `Device.secret` cifrado en reposo con AES-256-GCM (`enc:v1:iv:tag:ct`); master key en env `GUARDIAN_SECRET_KEY`, fuera de la BD (KMS-ready). Se descifra solo en memoria para verificar firma; nunca se devuelve tras el provisioning. Producción falla al arrancar si falta la key. Secretos legado en claro siguen validando y se re-cifran al reescribirse. Ver `src/devices/secret-crypto.ts`.
 
-5. **CORS está abierto con `app.enableCors()`.**  
-   No sustituye a autenticación, pero producción debe restringir orígenes y separar configuración de desarrollo.
+5. ~~**CORS estaba abierto con `app.enableCors()`.**~~ **Resuelto (PR3).**  
+   Origen restringido a `trustedOrigins()` (`src/config/origins.ts`), fuente única compartida con Better Auth. Producción solo admite `guardian://` y lo declarado en `TRUSTED_ORIGINS`; el bloque local es solo desarrollo. Los endpoints del dispositivo no llevan Origin (firmware), así que CORS no los afecta: la firma HMAC sigue siendo su autoridad.
 
-6. **La ubicación exacta sale a terceros en la app actual.**  
-   Nominatim recibe lat/lon para reverse-geocode. Google Maps/Waze reciben las coordenadas cuando el usuario pulsa sus botones. Debe ser una decisión explícita de privacidad.
+6. **La ubicación exacta sale a terceros.** *(Mitigado en PR3.)*  
+   El reverse-geocode ya no sale desde cada móvil: pasa por el proxy del backend (hueco 11), un único punto que cachea y limita. Pendiente: Google Maps/Waze siguen recibiendo las coordenadas cuando el usuario pulsa sus botones — falta el aviso explícito de terceros en la app (PR3b).
 
 7. ~~**La alerta actual no tiene estado propio.**~~ **Resuelto (PR1).**  
    Incidente persistente (`OPEN` → `ACKNOWLEDGED` → `CLOSED`) independiente del último evento. `power_lost` abre incidente propio; un `heartbeat` posterior no lo oculta. Ningún incidente `OPEN` se cierra por telemetría; un `power_lost` revisado se cierra al observar energía de vehiculo restablecida (`closedByEventSeq`).
@@ -95,8 +96,8 @@ El banco Python continúa siendo útil como implementación de referencia y simu
 10. ~~**La telemetría de batería es ambigua.**~~ **Resuelto (PR2).**  
     Protocolo v2: `power {vehicleMv, reserveMv?, source}` obligatorio en todo evento; `batteryMv` rechazado. La app muestra el rail activo.
 
-11. **El reverse-geocode actual no garantiza la política de Nominatim.**  
-    `staleTime` evita repetir una misma consulta, pero varias filas/posiciones distintas pueden lanzar peticiones en paralelo. Antes de producción hay que centralizar cache + rate limit o retirar el reverse-geocode masivo del cliente.
+11. ~~**El reverse-geocode del cliente no garantiza la política de Nominatim.**~~ **Resuelto (PR3).**  
+    Proxy de backend `GET /v1/geocode/reverse` (autenticado): cache en memoria por coordenada redondeada + rate-limit GLOBAL serializado a ≤1 req/s hacia Nominatim + User-Agent propio. La app deja de llamar a Nominatim directamente (`mobile/src/lib/geocode.ts` consume el proxy). Ver `src/geocode/`.
 
 12. **Provisioning todavía no equivale a pairing seguro.**  
     La revisión corrigió el binding `@Body()` de `POST /v1/devices`, pero falta un flujo de claim/pairing con presencia física y credenciales de un solo uso.

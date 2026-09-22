@@ -2,13 +2,25 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { trustedOrigins } from './config/origins';
+import { assertSecretKeyConfigured } from './devices/secret-crypto';
 
 async function bootstrap() {
+  const isProd = process.env.NODE_ENV === 'production';
+  // Fail-closed: sin master key de cifrado de secretos no se arranca en prod.
+  assertSecretKeyConfigured();
   // rawBody: necesario para verificar la firma HMAC del dispositivo sobre
   // los bytes exactos del envelope (ver IngestController).
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  // Logger acotado en produccion: sin debug/verbose, para no volcar cuerpos de
+  // peticion ni detalle sensible; error/warn/log bastan para operar.
+  const app = await NestFactory.create(AppModule, {
+    rawBody: true,
+    logger: isProd ? ['error', 'warn', 'log'] : ['error', 'warn', 'log', 'debug', 'verbose'],
+  });
 
-  app.enableCors();
+  // CORS restringido a origenes de confianza (nunca abierto). La app envia la
+  // cookie de sesion, asi que credentials debe ir activo.
+  app.enableCors({ origin: trustedOrigins(), credentials: true });
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
