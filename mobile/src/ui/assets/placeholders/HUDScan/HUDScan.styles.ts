@@ -29,7 +29,11 @@ export const styles = StyleSheet.create({
    * Uses `absoluteFillObject` to cover the entire parent container.
    */
   root: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     overflow: 'hidden',
   },
   /**

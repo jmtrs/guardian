@@ -34,4 +34,9 @@ export type PlaceholderProps = {
    * @default 'carbon'
    */
   tone?: PlaceholderTone;
+  /**
+   * Explicit color override — takes precedence over `tone`. Pass the active
+   * theme accent so animations follow the chosen palette.
+   */
+  color?: string;
 };

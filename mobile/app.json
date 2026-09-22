@@ -38,7 +38,11 @@
             "useFrameworks": "static"
           }
         }
-      ]
+      ],
+      "expo-image",
+      "expo-localization",
+      "expo-secure-store",
+      "@maplibre/maplibre-react-native"
     ],
     "extra": {
       "EXPO_PUBLIC_API_URL": ""

@@ -42,8 +42,8 @@ import { styles, STRIPE_COUNT } from './LaneStripe.styles';
  * <LaneStripe intensity="low" tone="smoke" />
  * ```
  */
-export function LaneStripe({ style, intensity = 'medium', tone = 'carbon' }: PlaceholderProps) {
-  const color = getPlaceholderColor(tone);
+export function LaneStripe({ style, intensity = 'medium', tone = 'carbon', color }: PlaceholderProps) {
+  const stripeColor = color ?? getPlaceholderColor(tone);
   const { translateX } = useLaneStripeAnim();
 
   return (
@@ -55,7 +55,7 @@ export function LaneStripe({ style, intensity = 'medium', tone = 'carbon' }: Pla
         {Array.from({ length: STRIPE_COUNT }, (_, i) => (
           <View
             key={i}
-            style={[styles.stripe, { left: i * STRIPE_PERIOD, backgroundColor: color }]}
+            style={[styles.stripe, { left: i * STRIPE_PERIOD, backgroundColor: stripeColor }]}
           />
         ))}
       </Animated.View>

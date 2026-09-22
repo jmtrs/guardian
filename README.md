@@ -6,14 +6,22 @@ Vigilante personal independiente para un coche antiguo de 12 V: movimiento, bate
 
 Backend **NestJS + Prisma + PostgreSQL** con Better Auth (entrada por código OTP al email, sin contraseña ni teléfono) y app **Expo**. El endpoint de ingesta del dispositivo es el mismo `/v1/events` firmado con HMAC; el servidor Python queda como referencia de banco.
 
+La app móvil incluye login OTP, dashboard con recuadros reordenables (ubicación,
+eventos, estado + iniciar/finalizar viaje), mapa con rastro del viaje (OpenFreeMap,
+sin API key) y navegación a Google Maps/Waze, historial y ajustes de tema/idioma.
+Detalle y arranque de la app: **[`mobile/README.md`](mobile/README.md)**.
+
 ```bash
 make setup          # pnpm install + prisma generate
 make db-start       # postgres docker
 make db-migrate     # prisma migrate dev
 node backend/scripts/seed-device.mjs   # dispositivo de banco (imprime GUARDIAN_DEVICE_KEY_HEX)
 make dev-backend    # Nest en :3000 (Swagger en /docs)
-make dev-mobile     # Expo
 ```
+
+> **La app móvil requiere un _dev build_** (`cd mobile && pnpm android` / `pnpm ios`),
+> no Expo Go: usa módulos nativos (MapLibre, gesture-handler, reanimated). En dev el
+> código OTP es fijo `000000`. Ver [`mobile/README.md`](mobile/README.md).
 
 ## Documentación vigente
 

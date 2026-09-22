@@ -3,7 +3,7 @@ import { Animated, View } from 'react-native';
 import type { LayoutChangeEvent } from 'react-native';
 
 import type { PlaceholderProps } from '../Placeholder.types';
-import { getPlaceholderOpacity } from '../placeholderUtils';
+import { getPlaceholderColor, getPlaceholderOpacity } from '../placeholderUtils';
 import { useHUDScanAnim } from './HUDScan.anim';
 import { styles, TRAIL_H } from './HUDScan.styles';
 
@@ -56,8 +56,10 @@ import { styles, TRAIL_H } from './HUDScan.styles';
  * <HUDScan intensity="low" />
  * ```
  */
-export function HUDScan({ style, intensity = 'medium' }: PlaceholderProps) {
+export function HUDScan({ style, intensity = 'medium', tone = 'warning', color }: PlaceholderProps) {
   const [containerHeight, setContainerHeight] = useState(0);
+  // Every lit layer follows the active accent so the sweep matches the theme.
+  const tint = { backgroundColor: color ?? getPlaceholderColor(tone) };
 
   function onLayout(e: LayoutChangeEvent) {
     const { height } = e.nativeEvent.layout;
@@ -80,16 +82,18 @@ export function HUDScan({ style, intensity = 'medium' }: PlaceholderProps) {
               { transform: [{ translateY: scanTranslateY }] },
             ]}
           >
-            <View style={styles.trailFar} />
-            <View style={styles.trailMid} />
-            <View style={styles.trailNear} />
-            <View style={styles.scanLine} />
-            <View style={styles.afterGlow} />
-            <View style={styles.tickLeft} />
-            <View style={styles.tickRight} />
+            <View style={[styles.trailFar, tint]} />
+            <View style={[styles.trailMid, tint]} />
+            <View style={[styles.trailNear, tint]} />
+            <View style={[styles.scanLine, tint]} />
+            <View style={[styles.afterGlow, tint]} />
+            <View style={[styles.tickLeft, tint]} />
+            <View style={[styles.tickRight, tint]} />
           </Animated.View>
 
-          <Animated.View style={[styles.echoLine, { transform: [{ translateY: echoTranslateY }] }]} />
+          <Animated.View
+            style={[styles.echoLine, tint, { transform: [{ translateY: echoTranslateY }] }]}
+          />
         </>
       )}
     </View>

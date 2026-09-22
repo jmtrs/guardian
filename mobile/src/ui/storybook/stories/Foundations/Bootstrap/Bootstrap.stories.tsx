@@ -3,9 +3,9 @@ import type { Meta, StoryObj } from '@storybook/react-native';
 import { Text, View } from 'react-native';
 
 import { LaneStripe, MetalPlate } from '@/ui/assets/placeholders';
+import { HUDButton } from '@/ui/composites/HUDButton';
 import { useUITheme } from '@/ui/theme';
 import { createBootstrapStyles } from './Bootstrap.styles';
-import { HUDButton } from './HUDButton';
 
 type BootstrapStoryCardProps = {
   headline: string;
@@ -40,7 +40,7 @@ function BootstrapStoryCard({ headline, body }: BootstrapStoryCardProps) {
         <View style={styles.trackMarker} />
       </View>
       <View style={styles.actions}>
-        <HUDButton />
+        <HUDButton label="OK" onPress={() => {}} />
       </View>
     </MetalPlate>
   );

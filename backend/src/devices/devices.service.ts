@@ -25,9 +25,21 @@ const DEVICE_PUBLIC_FIELDS = {
   state: true,
   lastSeq: true,
   lastSeenAt: true,
+  lastLat: true,
+  lastLon: true,
+  lastFixAt: true,
+  lastBatteryMv: true,
   createdAt: true,
   updatedAt: true,
 } as const;
+
+export type DevicePosition = {
+  lat: number;
+  lon: number;
+  fixAtUtc: string;
+  observedAt: Date;
+  kind: string;
+};
 
 @Injectable()
 export class DevicesService {
@@ -74,6 +86,36 @@ export class DevicesService {
   }
 
   /**
+   * Rastro de posiciones para el mapa: eventos recientes que traen `position`.
+   * Prisma no filtra bien dentro del JSON payload, asi que traemos los ultimos
+   * eventos y filtramos en memoria (volumen acotado por `limit`). Se devuelve
+   * en orden cronologico ascendente para dibujar la polyline del viaje.
+   */
+  async listPositions(deviceId: string, ownerId: string, limit = 50): Promise<DevicePosition[]> {
+    const take = Math.min(Math.max(limit, 1), 200);
+    const events = await this.prisma.deviceEvent.findMany({
+      where: { device: { id: deviceId, ownerId } },
+      orderBy: { observedAt: 'desc' },
+      take,
+    });
+    const positions: DevicePosition[] = [];
+    for (const event of events) {
+      const payload = event.payload as { position?: DevicePosition | null } | null;
+      const pos = payload?.position;
+      if (pos && typeof pos.lat === 'number' && typeof pos.lon === 'number') {
+        positions.push({
+          lat: pos.lat,
+          lon: pos.lon,
+          fixAtUtc: pos.fixAtUtc,
+          observedAt: event.observedAt,
+          kind: event.kind,
+        });
+      }
+    }
+    return positions.reverse();
+  }
+
+  /**
    * Ingest del dispositivo: verify HMAC sobre bytes crudos -> decode -> anti-replay.
    * Espejo de guardian/server.py: 202 aceptado, 401 firma, 409 replay,
    * 404 desconocido, 400 envelope invalido.
@@ -101,10 +143,26 @@ export class DevicesService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      // Denormaliza el ultimo estado conocido junto al avance de secuencia:
+      // como va en el mismo updateMany guardado por `lastSeq < sequence`,
+      // solo se escribe con eventos nuevos (respeta anti-replay, ignora replays).
+      const deviceUpdate: Prisma.DeviceUpdateManyMutationInput = {
+        lastSeq: event.sequence,
+        lastSeenAt: new Date(),
+      };
+      if (event.position) {
+        deviceUpdate.lastLat = event.position.lat;
+        deviceUpdate.lastLon = event.position.lon;
+        deviceUpdate.lastFixAt = new Date(event.position.fixAtUtc);
+      }
+      if (event.batteryMv != null) {
+        deviceUpdate.lastBatteryMv = event.batteryMv;
+      }
+
       // Anti-replay atomico: solo avanza lastSeq si el evento es nuevo.
       const advanced = await tx.device.updateMany({
         where: { id: deviceId, lastSeq: { lt: event.sequence } },
-        data: { lastSeq: event.sequence, lastSeenAt: new Date() },
+        data: deviceUpdate,
       });
       if (advanced.count === 0) {
         throw new ConflictException('Replayed or stale sequence');

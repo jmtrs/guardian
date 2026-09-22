@@ -1,18 +1,16 @@
-import { View, ActivityIndicator } from 'react-native';
 import { Redirect, Stack } from 'expo-router';
 
 import { authClient } from '@/api/auth-client';
-import { uiFontFamily } from '@/ui/theme/fonts';
+import { ScreenLoader } from '@/ui/composites/ScreenLoader';
+import { darkTheme } from '@/ui/theme';
+
+const canvas = darkTheme.semantic.bg.canvas;
 
 export default function HomeLayout() {
   const { data: session, isPending } = authClient.useSession();
 
   if (isPending) {
-    return (
-      <View style={{ flex: 1, backgroundColor: '#0b0d10', justifyContent: 'center' }}>
-        <ActivityIndicator color="#b45309" />
-      </View>
-    );
+    return <ScreenLoader />;
   }
 
   // Guard: sin sesion activa se vuelve al login.
@@ -20,13 +18,13 @@ export default function HomeLayout() {
     return <Redirect href="/(auth)/login" />;
   }
 
+  // Sin header bar: cada pantalla compone su propia cabecera (HUD-style).
   return (
     <Stack
       screenOptions={{
-        headerStyle: { backgroundColor: '#0b0d10' },
-        headerTintColor: '#e2e8f0',
-        headerTitleStyle: { fontFamily: uiFontFamily.ui.semibold },
-        contentStyle: { backgroundColor: '#0b0d10' },
+        headerShown: false,
+        contentStyle: { backgroundColor: canvas },
+        animation: 'none',
       }}
     />
   );

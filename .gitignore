@@ -49,7 +49,10 @@ backend/prisma/migrations/migration_lock.toml
 # Expo
 mobile/.expo/
 mobile/.expo-shared/
-mobile/android/local.properties
+# Native dirs son generados por `expo prebuild` (CNG) desde app.json + plugins.
+# No se versionan: se regeneran en cada maquina para el dev build.
+mobile/android/
+mobile/ios/
 mobile/storybook-static/
 mobile/test-results/
 mobile/playwright-report/

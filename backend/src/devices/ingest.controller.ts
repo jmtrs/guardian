@@ -75,6 +75,17 @@ export class DevicesController {
     return this.devices.listEvents(id, req.user!.id, safeLimit);
   }
 
+  @Get(':id/positions')
+  positions(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Query('limit') limit?: string,
+  ) {
+    const parsed = limit !== undefined ? Number(limit) : NaN;
+    const safeLimit = Number.isFinite(parsed) ? Math.trunc(parsed) : 50;
+    return this.devices.listPositions(id, req.user!.id, safeLimit);
+  }
+
   @Post(':id/trip/start')
   startTrip(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.devices.startTrip(id, req.user!.id);
