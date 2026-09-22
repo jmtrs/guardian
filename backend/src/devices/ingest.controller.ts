@@ -27,7 +27,7 @@ export class CreateDeviceDto {
 /**
  * Endpoint del dispositivo. Recibe el envelope crudo (la firma HMAC va sobre
  * los bytes exactos, asi que leemos req.rawBody — ver rawBody en main.ts).
- * Espejo del /v1/events de guardian/server.py.
+ * Endpoint de ingesta de eventos del dispositivo.
  */
 @Controller()
 export class IngestController {
@@ -81,10 +81,15 @@ export class DevicesController {
     @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
     @Query('limit') limit?: string,
+    @Query('incidentId') incidentId?: string,
+    @Query('tripId') tripId?: string,
   ) {
     const parsed = limit !== undefined ? Number(limit) : NaN;
     const safeLimit = Number.isFinite(parsed) ? Math.trunc(parsed) : 50;
-    return this.devices.listPositions(id, req.user!.id, safeLimit);
+    return this.devices.listPositions(id, req.user!.id, safeLimit, {
+      incidentId: incidentId || undefined,
+      tripId: tripId || undefined,
+    });
   }
 
   @Get(':id/incidents')
@@ -100,6 +105,39 @@ export class DevicesController {
   @Post(':id/trip/end')
   endTrip(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.devices.endTrip(id, req.user!.id);
+  }
+
+  @Post(':id/commands/locate')
+  requestLocate(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.devices.requestLocate(id, req.user!.id);
+  }
+
+  @Get(':id/commands')
+  commands(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.devices.listCommands(id, req.user!.id);
+  }
+}
+
+// Canal dispositivo: poll de comandos pendientes. Misma autenticacion HMAC
+// que /v1/events pero con K_command (contexto propio, nunca K_event).
+@Controller()
+export class DeviceCommandsController {
+  constructor(private readonly devices: DevicesService) {}
+
+  @Post('v1/commands/poll')
+  @HttpCode(200)
+  async poll(@Req() req: Request) {
+    const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
+    const deviceId = req.headers['x-device-id'];
+    const signature = req.headers['x-guardian-signature'];
+    if (!rawBody || !deviceId || !signature) {
+      throw new BadRequestException('Missing raw body, X-Device-Id or X-Guardian-Signature');
+    }
+    return this.devices.pollCommands(
+      Array.isArray(deviceId) ? deviceId[0] : deviceId,
+      rawBody,
+      Array.isArray(signature) ? signature[0] : signature,
+    );
   }
 }
 

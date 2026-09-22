@@ -12,15 +12,20 @@ function assert(cond: unknown, msg: string) {
   console.log(`  ok: ${msg}`);
 }
 
-function envelope(deviceId: string, sequence: number, kind: string): Buffer {
+function envelope(
+  deviceId: string,
+  sequence: number,
+  kind: string,
+  source: 'vehicle' | 'reserve' = 'vehicle',
+): Buffer {
   return Buffer.from(
     JSON.stringify({
-      schemaVersion: 1,
+      schemaVersion: 2,
       deviceId,
       sequence,
       kind,
       observedAtUtc: new Date().toISOString(),
-      batteryMv: null,
+      power: { vehicleMv: 13600, reserveMv: 4100, source },
       position: null,
     }),
     'utf8',
@@ -36,11 +41,11 @@ async function main() {
   const user = await prisma.user.create({
     data: { id: randomUUID(), name: 'drive', email: `${randomUUID()}@drive.test` },
   });
-  const { device, secret } = await svc.createDevice(user.id, 'drive-car');
+  const { device, secret } = await svc.createDevice(user.id, 'drive-veh');
   const id = device.id;
-  const post = (seq: number, kind: string) => {
-    const body = envelope(id, seq, kind);
-    return svc.ingest(id, body, svc.signForTest(body, secret));
+  const post = (seq: number, kind: string, source: 'vehicle' | 'reserve' = 'vehicle') => {
+    const body = envelope(id, seq, kind, source);
+    return svc.ingest(id, body, svc.signForTest(body, secret, id));
   };
 
   try {
@@ -71,6 +76,26 @@ async function main() {
     const dev = await prisma.device.findUniqueOrThrow({ where: { id } });
     assert(acked.state === 'ACKNOWLEDGED', 'ack pasa a ACKNOWLEDGED');
     assert(dev.state === 'ARMED', 'ack NO desarma (state sigue ARMED)');
+
+    // 6) Recuperacion de energia NO toca un power_lost OPEN: exige Revisado.
+    //    (y el movimiento ACKNOWLEDGED tampoco se cierra por telemetria).
+    await post(5, 'heartbeat');
+    let pl = open.find((i) => i.kind === 'power_lost')!;
+    pl = await prisma.incident.findUniqueOrThrow({ where: { id: pl.id } });
+    assert(pl.state === 'OPEN', 'power_lost OPEN sobrevive a heartbeat con source=vehicle');
+    assert(acked.state === 'ACKNOWLEDGED', 'movimiento ACKNOWLEDGED no se cierra por telemetria');
+
+    // 7) Revisado del corte + sigue en reserva -> NO cierra (sin restauracion).
+    await svc.acknowledgeIncident(pl.id, user.id);
+    await post(6, 'heartbeat', 'reserve');
+    pl = await prisma.incident.findUniqueOrThrow({ where: { id: pl.id } });
+    assert(pl.state === 'ACKNOWLEDGED', 'en reserva no hay restauracion: sigue ACKNOWLEDGED');
+
+    // 8) Alimentacion restablecida -> CLOSED con el seq que lo cerro.
+    await post(7, 'heartbeat');
+    pl = await prisma.incident.findUniqueOrThrow({ where: { id: pl.id } });
+    assert(pl.state === 'CLOSED', 'source=vehicle cierra el power_lost revisado');
+    assert(pl.closedByEventSeq === 7, 'cierre trazado con closedByEventSeq');
 
     console.log('\nPR1 drive: TODO OK');
   } finally {

@@ -1,4 +1,4 @@
-import { shouldOpenIncident, TRIP_RESOLVING_KINDS } from './incident';
+import { shouldOpenIncident, shouldCloseAcknowledged, TRIP_RESOLVING_KINDS } from './incident';
 
 // La regla de apertura de incidentes es el corazon de la seguridad de estado:
 // se testea pura, sin BD (igual que protocol.spec.ts).
@@ -39,5 +39,24 @@ describe('TRIP_RESOLVING_KINDS', () => {
 
   it('NO auto-resuelve corte de alimentacion (exige Revisado explicito)', () => {
     expect(TRIP_RESOLVING_KINDS).not.toContain('power_lost');
+  });
+});
+
+describe('shouldCloseAcknowledged (cierre por recuperacion observada)', () => {
+  it('power_lost revisado + alimentacion restablecida -> cierra', () => {
+    expect(shouldCloseAcknowledged('ACKNOWLEDGED', 'power_lost', 'vehicle')).toBe(true);
+  });
+
+  it('OPEN jamas se cierra por evento: exige Revisado primero', () => {
+    expect(shouldCloseAcknowledged('OPEN', 'power_lost', 'vehicle')).toBe(false);
+  });
+
+  it('sin restauracion real (sigue en reserva) no cierra', () => {
+    expect(shouldCloseAcknowledged('ACKNOWLEDGED', 'power_lost', 'reserve')).toBe(false);
+    expect(shouldCloseAcknowledged('ACKNOWLEDGED', 'power_lost', 'unknown')).toBe(false);
+  });
+
+  it('movimiento no se cierra por telemetria de energia', () => {
+    expect(shouldCloseAcknowledged('ACKNOWLEDGED', 'suspected_movement', 'vehicle')).toBe(false);
   });
 });
