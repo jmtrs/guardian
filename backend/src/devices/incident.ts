@@ -23,3 +23,15 @@ export function shouldOpenIncident(state: DeviceState, kind: string): boolean {
 export function incidentKindFor(kind: string): IncidentKind {
   return kind as IncidentKind;
 }
+
+/**
+ * Tipos de incidente que se resuelven al autorizar un viaje: el dueno, con su
+ * sesion autenticada, declara presencia ("fui yo"). Es el sustituto EN SOFTWARE
+ * del reto BLE autenticado (diferido a firmware, §6): cuando exista, el firmware
+ * confirmara la presencia criptograficamente al despertar por movimiento y
+ * cerrara estos incidentes sin intervencion manual — sin cambiar este contrato.
+ *
+ * power_lost NO se incluye a proposito: un corte de alimentacion es mas serio
+ * (posible manipulacion) y exige Revisado/cierre explicito aunque haya viaje.
+ */
+export const TRIP_RESOLVING_KINDS: IncidentKind[] = ['suspected_movement'];
