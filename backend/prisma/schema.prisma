@@ -81,6 +81,28 @@ enum DeviceState {
   WORKSHOP // modo taller temporal
 }
 
+// Handshake de confirmacion del viaje. Separado de DeviceState: el modo
+// (ARMED/TRIP/WORKSHOP) es el estado de seguridad; tripState rastrea si el
+// desarme fue solicitado y confirmado. Sin canal ACK con el dispositivo aun,
+// el backend auto-confirma (CONFIRMED) — ver startTrip. Contrato listo para
+// el ACK fisico (PR futuro): nunca se finge confirmacion de dispositivo.
+enum TripState {
+  IDLE // sin viaje
+  REQUESTED // solicitado, pendiente de confirmar
+  CONFIRMED // confirmado (hoy: por el backend)
+}
+
+enum IncidentKind {
+  suspected_movement
+  power_lost
+}
+
+enum IncidentState {
+  OPEN // abierto, sin revisar
+  ACKNOWLEDGED // "Revisado" por el dueno — NO desarma
+  CLOSED // cerrado explicitamente
+}
+
 model Device {
   id         String      @id @default(cuid())
   name       String
@@ -90,6 +112,10 @@ model Device {
   ownerId    String
   owner      User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   state      DeviceState @default(ARMED)
+  // Handshake del viaje (ver enum TripState). workshopUntil expira el modo
+  // taller: mientras exista, el dispositivo esta en WORKSHOP, nunca ARMED.
+  tripState     TripState @default(IDLE)
+  workshopUntil DateTime?
   lastSeq    Int         @default(0)
   lastSeenAt DateTime?
   // Ultimo estado denormalizado: evita escanear device_events para la
@@ -102,8 +128,29 @@ model Device {
   updatedAt  DateTime    @updatedAt
   events     DeviceEvent[]
   trips      TripAuthorization[]
+  incidents  Incident[]
 
   @@map("devices")
+}
+
+// Incidente de seguridad: hecho persistente, no derivado del ultimo evento.
+// Un heartbeat posterior NO lo cierra (el ingest nunca cierra incidentes);
+// solo el dueno cierra explicitamente. Idempotencia: un unico incidente OPEN
+// por (deviceId, kind) — garantizada en codigo dentro de la tx del ingest,
+// que es de escritor unico por dispositivo (guardado por lastSeq).
+model Incident {
+  id                String        @id @default(cuid())
+  deviceId          String
+  device            Device        @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  kind              IncidentKind
+  state             IncidentState @default(OPEN)
+  openedAt          DateTime      @default(now())
+  acknowledgedAt    DateTime?
+  closedAt          DateTime?
+  openedByEventSeq  Int // seq del evento que lo abrio (trazabilidad)
+
+  @@index([deviceId, state])
+  @@map("incidents")
 }
 
 // kinds (protocol.py ALLOWED_TYPES):

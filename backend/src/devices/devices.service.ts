@@ -11,6 +11,7 @@ import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 import { decodeEvent, sign, verify, ProtocolError, type GuardianEvent } from './protocol';
+import { shouldOpenIncident, incidentKindFor } from './incident';
 
 export type IngestResult = {
   status: 202;
@@ -23,6 +24,8 @@ const DEVICE_PUBLIC_FIELDS = {
   name: true,
   ownerId: true,
   state: true,
+  tripState: true,
+  workshopUntil: true,
   lastSeq: true,
   lastSeenAt: true,
   lastLat: true,
@@ -181,6 +184,28 @@ export class DevicesService {
         },
       });
 
+      // Alerta como hecho persistente: si el evento es de alerta y el
+      // dispositivo esta ARMED, abrimos incidente. Idempotente: un unico
+      // incidente OPEN por (deviceId, kind). Esta tx es de escritor unico por
+      // dispositivo (guardada por lastSeq), asi que el findFirst+create no
+      // compite consigo mismo. El incidente NO se cierra aqui: un heartbeat
+      // posterior no borra la alerta (ver incident.ts).
+      if (shouldOpenIncident(device.state, event.kind)) {
+        const open = await tx.incident.findFirst({
+          where: { deviceId, kind: incidentKindFor(event.kind), state: 'OPEN' },
+          select: { id: true },
+        });
+        if (!open) {
+          await tx.incident.create({
+            data: {
+              deviceId,
+              kind: incidentKindFor(event.kind),
+              openedByEventSeq: event.sequence,
+            },
+          });
+        }
+      }
+
       return { status: 202 as const, sequence: event.sequence };
     });
   }
@@ -194,15 +219,20 @@ export class DevicesService {
     await this.requireOwnedDevice(deviceId, userId);
     return this.prisma.$transaction(async (tx) => {
       // Atomico contra starts concurrentes: solo uno gana el update.
+      // tripState=CONFIRMED de forma explicita: hoy NO hay canal ACK con el
+      // dispositivo, asi que el backend auto-confirma el desarme. Cuando exista
+      // el ACK fisico (PR futuro), este write pasara a REQUESTED y la
+      // confirmacion vendra del dispositivo. No se finge una confirmacion
+      // fisica que no existe: se documenta que la autoridad es el backend.
       const advanced = await tx.device.updateMany({
         where: { id: deviceId, state: { not: 'TRIP' } },
-        data: { state: 'TRIP' },
+        data: { state: 'TRIP', tripState: 'CONFIRMED' },
       });
       if (advanced.count === 0) {
         throw new ConflictException('Trip already active');
       }
       await tx.tripAuthorization.create({ data: { deviceId, startedBy: userId } });
-      return tx.device.findUniqueOrThrow({ where: { id: deviceId } });
+      return tx.device.findUniqueOrThrow({ where: { id: deviceId }, select: DEVICE_PUBLIC_FIELDS });
     });
   }
 
@@ -215,7 +245,48 @@ export class DevicesService {
         where: { deviceId, endedAt: null },
         data: { endedAt: new Date() },
       });
-      return tx.device.update({ where: { id: deviceId }, data: { state: 'ARMED' } });
+      return tx.device.update({
+        where: { id: deviceId },
+        data: { state: 'ARMED', tripState: 'IDLE' },
+        select: DEVICE_PUBLIC_FIELDS,
+      });
     });
+  }
+
+  listIncidents(deviceId: string, ownerId: string) {
+    return this.prisma.incident.findMany({
+      where: { device: { id: deviceId, ownerId } },
+      orderBy: { openedAt: 'desc' },
+      take: 50,
+    });
+  }
+
+  /**
+   * "Revisado": OPEN -> ACKNOWLEDGED. Guardado atomico por estado (mismo patron
+   * que startTrip). NO desarma ni cambia DeviceState: reconocer una alerta no
+   * es autorizarla. Solo actua sobre incidentes propios y aun abiertos.
+   */
+  async acknowledgeIncident(incidentId: string, ownerId: string) {
+    const advanced = await this.prisma.incident.updateMany({
+      where: { id: incidentId, state: 'OPEN', device: { ownerId } },
+      data: { state: 'ACKNOWLEDGED', acknowledgedAt: new Date() },
+    });
+    if (advanced.count === 0) {
+      // No existe, no es suyo, o ya no estaba OPEN.
+      throw new NotFoundException('Open incident not found');
+    }
+    return this.prisma.incident.findUniqueOrThrow({ where: { id: incidentId } });
+  }
+
+  /** Cierre explicito del incidente. OPEN|ACKNOWLEDGED -> CLOSED. */
+  async closeIncident(incidentId: string, ownerId: string) {
+    const advanced = await this.prisma.incident.updateMany({
+      where: { id: incidentId, state: { not: 'CLOSED' }, device: { ownerId } },
+      data: { state: 'CLOSED', closedAt: new Date() },
+    });
+    if (advanced.count === 0) {
+      throw new NotFoundException('Open incident not found');
+    }
+    return this.prisma.incident.findUniqueOrThrow({ where: { id: incidentId } });
   }
 }

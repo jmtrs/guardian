@@ -87,6 +87,11 @@ export class DevicesController {
     return this.devices.listPositions(id, req.user!.id, safeLimit);
   }
 
+  @Get(':id/incidents')
+  incidents(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.devices.listIncidents(id, req.user!.id);
+  }
+
   @Post(':id/trip/start')
   startTrip(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.devices.startTrip(id, req.user!.id);
@@ -95,5 +100,22 @@ export class DevicesController {
   @Post(':id/trip/end')
   endTrip(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.devices.endTrip(id, req.user!.id);
+  }
+}
+
+// Incidentes: acciones sobre un incidente concreto. Reconocer NO desarma.
+@Controller('v1/incidents')
+@UseGuards(BetterAuthGuard)
+export class IncidentsController {
+  constructor(private readonly devices: DevicesService) {}
+
+  @Post(':id/acknowledge')
+  acknowledge(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.devices.acknowledgeIncident(id, req.user!.id);
+  }
+
+  @Post(':id/close')
+  close(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.devices.closeIncident(id, req.user!.id);
   }
 }
