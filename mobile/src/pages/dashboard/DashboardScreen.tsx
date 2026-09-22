@@ -11,10 +11,12 @@ import { useTranslation } from 'react-i18next';
 
 import {
   useAcknowledgeIncident,
+  useDeviceCommands,
   useDeviceEvents,
   useDevices,
   useEndTrip,
   useIncidents,
+  useRequestLocate,
   useStartTrip,
 } from '@/api/devices';
 import { LaneStripe } from '@/ui/assets/placeholders';
@@ -71,14 +73,44 @@ export function DashboardScreen() {
   const device = devices?.[0];
   const { data: events } = useDeviceEvents(device?.id, 5, { refetchInterval: 5_000 });
   const { data: incidents } = useIncidents(device?.id, { refetchInterval: 5_000 });
+  const { data: commands } = useDeviceCommands(device?.id, { refetchInterval: 5_000 });
   const startTrip = useStartTrip(device?.id);
   const endTrip = useEndTrip(device?.id);
   const acknowledge = useAcknowledgeIncident(device?.id);
+  const locate = useRequestLocate(device?.id);
 
-  // Bateria: preferimos el valor denormalizado del dispositivo; caemos al ultimo
-  // evento con lectura si aun no llego. Placeholder '—' evita el pop-in.
-  const batteryMv =
-    device?.lastBatteryMv ?? events?.find((e) => e.payload?.batteryMv != null)?.payload?.batteryMv ?? null;
+  // Energia: lo que alimenta AHORA — si la fuente es la reserva, el voltaje
+  // util es el de la reserva. Reserva sin lectura: '—', nunca el rail del
+  // vehiculo (mostrar 13.6V miente si la de ~4V esta alimentando).
+  const effectiveMv =
+    device?.lastPowerSource === 'reserve'
+      ? device?.lastReserveMv ?? null
+      : device?.lastVehicleMv ?? null;
+  const powerSourceText =
+    device?.lastPowerSource === 'vehicle'
+      ? t('home.powerVehicle')
+      : device?.lastPowerSource === 'reserve'
+        ? t('home.powerReserve')
+        : null;
+  const batteryText =
+    effectiveMv != null
+      ? `${(effectiveMv / 1000).toFixed(2)} V${powerSourceText ? ` · ${powerSourceText}` : ''}`
+      : '—';
+
+  // LOCATE_NOW: el estado se deriva del ULTIMO comando, no del mutacion local —
+  // el ACK solo existe cuando el dispositivo manda el gnss_fix con commandId.
+  // La lista viene fresca (el backend expira los PENDING caducados al leer).
+  const latestLocate = commands?.find((c) => c.type === 'LOCATE_NOW') ?? null;
+  const locateWaiting = latestLocate?.status === 'PENDING';
+  const locateLabel = locate.isPending
+    ? t('common.loading')
+    : locateWaiting
+      ? t('home.locateWaiting')
+      : latestLocate?.status === 'ACKED' && latestLocate.ackedAt
+        ? t('home.locateUpdated', { time: formatEventTime(latestLocate.ackedAt) })
+        : latestLocate?.status === 'EXPIRED'
+          ? t('home.locateExpired')
+          : t('home.locate');
 
   // La ALERTA es un incidente persistente, NO el ultimo evento: un heartbeat
   // posterior ya no la oculta y power_lost la enciende. Prioridad por estado,
@@ -146,7 +178,9 @@ export function DashboardScreen() {
             <Text style={styles.mapGlyph}>⌖</Text>
           </View>
           <View style={styles.mapBody}>
-            <Text style={styles.mapLabel}>{t('home.map')}</Text>
+            {/* Sin label "Ubicacion del vehiculo": la direccion ES la tarjeta.
+                Valor protagonista, detalle debajo, y la ultima posicion comparte
+                fila con el pedido de fix para no apilar lineas. */}
             <Text style={styles.mapValue} numberOfLines={1}>
               {placeText}
             </Text>
@@ -155,6 +189,36 @@ export function DashboardScreen() {
                 {geo.detail}
               </Text>
             ) : null}
+            <View style={styles.mapFooterRow}>
+              {device.lastFixAt ? (
+                <Text style={styles.mapDetail} numberOfLines={1} ellipsizeMode="tail">
+                  {t('home.lastFix')}: {formatEventTime(device.lastFixAt)}
+                </Text>
+              ) : (
+                <View />
+              )}
+              {/* Pedir fix ahora. El estado es del ULTIMO comando: PENDING espera
+                  el fix real; EXPIRED avisa; ACKED enseña cuando llego. Sin falsos
+                  "ubicado" — el ACK lo da el dispositivo, no el boton. */}
+              <Pressable
+                style={({ pressed }) => [styles.locateRow, pressed && styles.pressed]}
+                onPress={() => locate.mutate()}
+                disabled={locate.isPending || locateWaiting}
+                accessibilityLabel={t('home.locate')}
+                testID="locate-now"
+              >
+                <Text
+                  style={[
+                    styles.locateText,
+                    locateWaiting && styles.locateTextMuted,
+                    latestLocate?.status === 'EXPIRED' && styles.locateTextAlert,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {locateLabel}
+                </Text>
+              </Pressable>
+            </View>
           </View>
           <Text style={styles.mapArrow}>→</Text>
         </View>
@@ -215,7 +279,6 @@ export function DashboardScreen() {
               color={theme.semantic.accent.warning}
             />
           ) : null}
-          <Text style={styles.deviceName}>{device.name}</Text>
           <Text
             style={[
               styles.statusText,
@@ -257,9 +320,7 @@ export function DashboardScreen() {
             </View>
             <View style={styles.metaRow}>
               <Text style={styles.metaLabel}>{t('home.battery')}</Text>
-              <Text style={styles.metaValue}>
-                {batteryMv != null ? `${(batteryMv / 1000).toFixed(2)} V` : '—'}
-              </Text>
+              <Text style={styles.metaValue}>{batteryText}</Text>
             </View>
           </View>
         </View>
@@ -283,7 +344,11 @@ export function DashboardScreen() {
     activeIncident,
     acknowledge,
     statusText,
-    batteryMv,
+    batteryText,
+    locate,
+    locateLabel,
+    locateWaiting,
+    latestLocate,
   ]);
 
   if (isLoading) {
@@ -306,8 +371,16 @@ export function DashboardScreen() {
   }
 
   // Tap en Ubicacion navega; long-press en cualquier card arrastra para reordenar.
+  // Con ALERTA abierta el mapa llega acotado al incidente: el rastro cuenta
+  // desde que salto la alerta, no los ultimos 100 puntos mezclados.
   const onCardPress = (key: DashboardCard) => {
-    if (key === 'location') router.push('/(home)/map');
+    if (key === 'location') {
+      router.push(
+        isOpenAlert && activeIncident
+          ? { pathname: '/(home)/map', params: { incidentId: activeIncident.id } }
+          : '/(home)/map',
+      );
+    }
   };
 
   const handleReorder = ({ from, to }: ReorderableListReorderEvent) => {

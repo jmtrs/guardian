@@ -17,11 +17,20 @@ import { createStyles } from './EventsScreen.styles';
 
 type Styles = ReturnType<typeof createStyles>;
 
-// Meta base sin posicion: #seq + bateria. El sitio fisico lo resuelve la fila.
+// Meta base sin posicion: #seq + energia (rail que alimenta ahora). El sitio
+// fisico lo resuelve la fila. En reserva sin lectura de reserva no se enseña
+// el rail del vehiculo: seria mentir sobre 13.6V con la de ~4V alimentando.
 function getBaseMeta(item: DeviceEvent): string {
   const parts: string[] = [`#${item.seq}`];
-  if (item.payload?.batteryMv != null) {
-    parts.push(`${(item.payload.batteryMv / 1000).toFixed(2)} V`);
+  const power = item.payload?.power;
+  if (power) {
+    const mv =
+      power.source === 'reserve'
+        ? power.reserveMv ?? null
+        : power.vehicleMv;
+    if (mv != null) {
+      parts.push(`${(mv / 1000).toFixed(2)} V`);
+    }
   }
   return parts.join(' · ');
 }
@@ -113,7 +122,6 @@ export function EventsScreen() {
             </Pressable>
             <View style={styles.headerBlock}>
               <Text style={styles.title}>{t('home.eventsTitle')}</Text>
-              {device ? <Text style={styles.subtitle}>{device.name}</Text> : null}
             </View>
           </View>
         }

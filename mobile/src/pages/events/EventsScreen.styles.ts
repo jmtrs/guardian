@@ -43,13 +43,6 @@ export function createStyles(theme: UITheme) {
       letterSpacing: 4,
       textTransform: 'uppercase',
     },
-    subtitle: {
-      color: theme.semantic.fg.muted,
-      fontFamily: theme.fontFamily.ui.regular,
-      fontSize: 12,
-      letterSpacing: 2,
-      textTransform: 'uppercase',
-    },
     muted: {
       color: theme.semantic.fg.muted,
       fontFamily: theme.fontFamily.ui.regular,

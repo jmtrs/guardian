@@ -103,13 +103,7 @@ export function createStyles(theme: UITheme) {
       ...theme.elevation.raised,
       shadowColor: semantic.accent.warning,
     },
-    infoLabel: {
-      color: semantic.fg.muted,
-      fontFamily: fontFamily.ui.medium,
-      fontSize: 11,
-      letterSpacing: 3,
-      textTransform: 'uppercase',
-    },
+    // Sin label sobre la direccion: la direccion encabeza la tarjeta.
     infoAddress: {
       color: semantic.accent.warning,
       fontFamily: fontFamily.display,
