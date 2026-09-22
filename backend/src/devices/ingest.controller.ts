@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Body,
   Controller,
   Get,
   HttpCode,
@@ -59,7 +60,7 @@ export class DevicesController {
   constructor(private readonly devices: DevicesService) {}
 
   @Post()
-  async create(@Req() req: AuthenticatedRequest, body: CreateDeviceDto) {
+  async create(@Req() req: AuthenticatedRequest, @Body() body: CreateDeviceDto) {
     return this.devices.createDevice(req.user!.id, body.name);
   }
 
