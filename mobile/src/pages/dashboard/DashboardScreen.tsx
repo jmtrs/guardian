@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import ReorderableList, {
   reorderItems,
@@ -51,12 +51,9 @@ export function DashboardScreen() {
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { order, setOrder } = useDashboardOrder();
-  // Scroll solo si el contenido no cabe: comparamos alto visible vs contenido.
-  const [listH, setListH] = useState(0);
-  const [contentH, setContentH] = useState(0);
-  const scrollEnabled = contentH > listH + 1;
 
-  // Polling: estado y eventos en vivo (alerta aparece sin recargar).
+  // Polling: estado y eventos en vivo (alerta aparece sin recargar). Sin
+  // pull-to-refresh: RefreshControl choca con el pan de la lista reordenable.
   const { data: devices, isLoading } = useDevices({ refetchInterval: 5_000 });
   const device = devices?.[0];
   const { data: events } = useDeviceEvents(device?.id, 5, { refetchInterval: 5_000 });
@@ -258,26 +255,19 @@ export function DashboardScreen() {
         {/* Cabecera fija: wordmark + engranaje. No scrollea. */}
         <View style={styles.header}>{wordmark}</View>
 
-        {/* Wrapper mide el alto disponible: ReorderableList sobrescribe su propio
-            onLayout, asi que medimos aqui para decidir si hace falta scroll. */}
-        <View style={styles.list} onLayout={(e) => setListH(e.nativeEvent.layout.height)}>
-          <ReorderableList
-            data={order}
-            keyExtractor={(item) => item}
-            renderItem={({ item }) => (
-              <DashCard onPress={() => onCardPress(item)} style={styles.cardSlot}>
-                {cardEls?.[item]}
-              </DashCard>
-            )}
-            onReorder={handleReorder}
-            contentContainerStyle={styles.content}
-            showsVerticalScrollIndicator={false}
-            bounces={false}
-            overScrollMode="never"
-            scrollEnabled={scrollEnabled}
-            onContentSizeChange={(_w, h) => setContentH(h)}
-          />
-        </View>
+        <ReorderableList
+          data={order}
+          keyExtractor={(item) => item}
+          renderItem={({ item }) => (
+            <DashCard onPress={() => onCardPress(item)} style={styles.cardSlot}>
+              {cardEls?.[item]}
+            </DashCard>
+          )}
+          onReorder={handleReorder}
+          style={styles.list}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        />
 
         <View style={[styles.footer, { paddingBottom: insets.bottom + theme.tokens.spacing['4'] }]}>
           <HUDButton
