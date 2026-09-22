@@ -4,7 +4,7 @@
 
 ## Decisión acordada para la primera versión personal
 
-- **Mantener LILYGO T-A7670E R2 europea `With GPS` + Adafruit LIS3DH.** No comprar otra placa por anticipado.
+- **Mantener LILYGO T-A7670E R2 europea `With GPS` + LIS3DH de 3,3 V con interrupción expuesta.** La referencia de compra vigente está en [`COMPONENTES.md`](../COMPONENTES.md); no comprar otro acelerómetro por anticipado.
 - **Aprovechar una sola 18650 Li-ion en el alojamiento de LILYGO como reserva**, en vez de añadir por defecto una segunda batería/cargador externo. La celda es opcional solo durante desarrollo USB; para el uso final es un requisito funcional, sujeto a superar los ensayos eléctricos y térmicos.
 - Aceptar que la transición 12 V → batería **puede reiniciar** ESP32/módem. El firmware tendrá evento pendiente persistido, detección de fuente, reconexión y reintento de alerta sin esperar al GPS. No prometer conmutación sin reinicio ni alerta garantizada sin cobertura.
 - No perseguimos certificación comercial, pero sí un montaje duradero para permanecer **meses en el coche** sin agotar su batería ni cargar una celda fuera de sus límites.
