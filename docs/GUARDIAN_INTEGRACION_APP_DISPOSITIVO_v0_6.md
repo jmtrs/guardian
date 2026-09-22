@@ -372,7 +372,7 @@ La señal que provoca el wake **no es una autorización**. SMS, RI, notificació
 
 ## 8. Remote wake: opcional y condicionado al consumo
 
-La placa oficial expone señales de módem DTR/RI y LILYGO publica ejemplos de `ModemSleep`. Sin embargo, LILYGO documenta para T-A7670X que el módem no entra en sleep correctamente cuando la placa está alimentada por USB-C/VBUS sin la solución de hardware indicada por el fabricante. Esto es un **riesgo central**, porque la instalación normal también necesitará alimentación externa.
+La placa oficial expone señales de módem DTR/RI y LILYGO publica ejemplos de `ModemSleep`. **La existencia de RI no demuestra por sí sola que un paquete IP arbitrario pueda despertar Guardian**: hay que verificar qué eventos/URC del A7670E pueden activar RI en el modo y firmware concretos, y qué mecanismo de red usaremos para provocarlos. Además, LILYGO documenta para T-A7670X que el módem no entra en sleep correctamente cuando la placa está alimentada por USB-C/VBUS sin la solución de hardware indicada por el fabricante. Esto es un **riesgo central**, porque la instalación normal también necesitará alimentación externa.
 
 Por tanto no se declara todavía:
 
