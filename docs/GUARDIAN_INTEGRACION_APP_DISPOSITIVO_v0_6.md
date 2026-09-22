@@ -29,7 +29,7 @@ En `mobile/` existe una app Expo con:
 - historial de eventos;
 - tema configurable, idioma ES/EN y logout.
 
-La app consulta el backend cada 5-10 s cuando las pantallas están abiertas. **Ese polling debe seguir siendo exclusivamente backend -> app y no debe despertar el coche.**
+La app consulta el backend cada 5-10 s cuando las pantallas están abiertas. **Ese polling es app -> backend y debe seguir leyendo únicamente estado ya almacenado en servidor; no debe generar comandos ni despertar el coche.**
 
 ### Backend actual
 
@@ -78,15 +78,28 @@ El banco Python continúa siendo útil como implementación de referencia y simu
 6. **La ubicación exacta sale a terceros en la app actual.**  
    Nominatim recibe lat/lon para reverse-geocode. Google Maps/Waze reciben las coordenadas cuando el usuario pulsa sus botones. Debe ser una decisión explícita de privacidad.
 
-7. **La alerta de la app se infiere del último evento.**  
-   Conviene modelar un incidente activo/acknowledged en vez de usar para siempre “último evento = movimiento”.
+7. **La alerta actual no tiene estado propio.**  
+   El dashboard solo considera alerta si el dispositivo está `ARMED` y el evento más reciente es `suspected_movement`. Un `heartbeat` posterior puede hacer desaparecer visualmente la alerta, y `power_lost` no activa hoy el estado rojo del dashboard. Debe existir un incidente persistente independiente del último evento.
 
-8. **El rastro actual son las últimas posiciones, no necesariamente un viaje o incidente concreto.**
+8. **`WORKSHOP` existe en backend pero la app no lo representa correctamente.**  
+   La lógica actual termina mostrando cualquier estado que no sea `TRIP` como `ARMADO`. No se habilitará modo taller real hasta diseñar expiración y confirmación en dispositivo.
 
-9. **El endpoint de creación de dispositivo debe revisarse antes de exponer provisioning en UI.**  
-   El controlador actual no usa `@Body()` en el parámetro de `CreateDeviceDto`.
+9. **El rastro actual son las últimas posiciones, no necesariamente un viaje o incidente concreto.**
 
-10. **La documentación de componentes v0.5 no refleja las últimas decisiones de banco.**
+10. **La telemetría de batería es ambigua.**  
+    El protocolo actual solo tiene `batteryMv`, pero el producto necesita distinguir como mínimo tensión de batería del coche, tensión/estado de reserva y fuente activa. No debe mostrarse un único campo “Batería” sin semántica física definida.
+
+11. **El reverse-geocode actual no garantiza la política de Nominatim.**  
+    `staleTime` evita repetir una misma consulta, pero varias filas/posiciones distintas pueden lanzar peticiones en paralelo. Antes de producción hay que centralizar cache + rate limit o retirar el reverse-geocode masivo del cliente.
+
+12. **Provisioning todavía no equivale a pairing seguro.**  
+    La revisión corrigió el binding `@Body()` de `POST /v1/devices`, pero falta un flujo de claim/pairing con presencia física y credenciales de un solo uso.
+
+13. **OTP de producción queda cerrado hasta implementar entrega real.**  
+    La revisión impide que códigos OTP terminen en logs de producción. Mientras no exista un transporte real de email, producción debe fallar de forma cerrada en vez de degradar a consola.
+
+14. **La documentación de componentes v0.5 estaba desactualizada.**  
+    `COMPONENTES.md` se actualiza junto con v0.6 y pasa a ser la fuente vigente de compra/banco.
 
 ---
 
@@ -110,7 +123,7 @@ El banco Python continúa siendo útil como implementación de referencia y simu
 
 El ESP32-S3 externo lee el INA219 y envía CSV/telemetría al Mac. No debe alimentarse desde el ramal que se está midiendo.
 
-El INA219 es suficiente para decidir si Guardian consume aproximadamente 0,5 mA, 2 mA, 10 mA o decenas/cientos de mA. No sustituye a un osciloscopio/profiler para capturar picos LTE muy breves.
+El INA219 es suficiente como **instrumento de cribado** para distinguir órdenes de magnitud y calcular consumo medio/energía. Con R100 su resolución física y la tolerancia del módulo genérico hacen que una lectura cercana al gate de 2 mA deba confirmarse con multímetro calibrado o instrumental mejor antes de aprobar el coche. Tampoco sustituye a un osciloscopio/profiler para capturar picos LTE muy breves. A corrientes LTE altas, el shunt de 0,1 Ω introduce caída de tensión y esa caída también debe registrarse.
 
 ---
 
@@ -255,14 +268,25 @@ APP <--BLE autenticado--> GUARDIAN (presencia local)
 
 La mera proximidad, una MAC BLE o un RSSI alto **no son autenticación**.
 
+### Pairing inicial y recuperación
+
+El pairing no puede consistir en “ver un BLE y asociarlo”. La primera vinculación debe requerir **presencia física** y una credencial de un solo uso o ventana de pairing explícita. Una vez reclamado el dispositivo, el pairing abierto se cierra.
+
+La recuperación por móvil perdido debe requerir un procedimiento deliberado de re-pairing con acceso físico al Guardian; no una API remota que entregue la clave BLE existente.
+
+Las credenciales locales se guardan en SecureStore en el móvil. En el firmware se evaluarán Secure Boot y Flash Encryption del ESP32 antes de considerar resistente el secreto ante acceso físico al dispositivo.
+
 ### Primer movimiento del propietario
 
 Un ESP32 en deep sleep no mantiene BLE activo. Por eso la app puede preparar una intención local y esperar a que el LIS3DH despierte Guardian al abrir/entrar/mover ligeramente el coche. Tras despertar, Guardian abre una ventana BLE corta para completar el desafío.
 
+La autorización local **no debe depender de que haya Internet o cobertura LTE**: un teléfono ya emparejado debe poder autorizar el viaje localmente y sincronizar el resultado con backend después.
+
 Debe existir una ventana transitoria `PREALERT` muy breve y medible:
 
+- el movimiento se persiste localmente desde el primer instante;
 - si llega autorización BLE válida, pasa a `TRIP`;
-- si no llega, genera la alerta.
+- si no llega, genera/transmite la alerta.
 
 La duración exacta se decide en pruebas para no degradar la detección antirrobo.
 
@@ -312,6 +336,8 @@ Esperando a Guardian...
 
 No mueve el marcador a una supuesta posición nueva hasta recibir un `gnss_fix` relacionado con ese comando.
 
+**El protocolo v1 actual no conserva un `commandId`/correlation id en los eventos.** Antes de implementar `LOCATE_NOW` hay que extender el contrato de evento o crear un mensaje de resultado específico que permita correlacionar de forma inequívoca solicitud, fix y ACK.
+
 ### Flujo del dispositivo
 
 ```text
@@ -346,7 +372,7 @@ La señal que provoca el wake **no es una autorización**. SMS, RI, notificació
 
 ## 8. Remote wake: opcional y condicionado al consumo
 
-La placa oficial expone señales de módem DTR/RI y LILYGO publica ejemplos de `ModemSleep`. Sin embargo, LILYGO también documenta limitaciones de sleep cuando ciertas revisiones se alimentan mediante USB/VBUS.
+La placa oficial expone señales de módem DTR/RI y LILYGO publica ejemplos de `ModemSleep`. Sin embargo, LILYGO documenta para T-A7670X que el módem no entra en sleep correctamente cuando la placa está alimentada por USB-C/VBUS sin la solución de hardware indicada por el fabricante. Esto es un **riesgo central**, porque la instalación normal también necesitará alimentación externa.
 
 Por tanto no se declara todavía:
 
@@ -369,7 +395,7 @@ GNSS OFF
 LIS3DH ON
 ```
 
-La app puede obtener una nueva posición en segundos, sujeto a red y fix GNSS.
+`REMOTE_READY` puede reducir mucho la latencia, pero **no se promete “en segundos”**: registro de red, cobertura, entorno GNSS e interior de garaje pueden hacer que la operación tarde hasta el timeout/TTL o falle. La UI debe mostrar progreso y la última posición válida mientras espera.
 
 #### B. DEEP
 
@@ -531,6 +557,12 @@ OPEN -> ACKNOWLEDGED -> CLOSED
 
 “Revisado” no desarma Guardian.
 
+Esto corrige dos defectos actuales de UI: un heartbeat posterior puede ocultar una alerta de movimiento y `power_lost` no activa por sí solo el estado rojo del dashboard.
+
+### Taller
+
+Mientras `WORKSHOP` no tenga expiración y confirmación física, la app no debe presentarlo como una función terminada. Cuando se implemente, debe mostrarse como estado propio y nunca caer visualmente a `ARMADO`.
+
 ### Polling
 
 El polling actual de 5-10 s puede mantenerse durante desarrollo porque consulta solo PostgreSQL/backend.
@@ -549,12 +581,18 @@ La ubicación de un vehículo es un dato sensible aunque este proyecto sea perso
 
 Los botones Google Maps y Waze comparten las coordenadas cuando el usuario los pulsa.
 
+El mapa descarga teselas/estilo de OpenFreeMap. La revisión vuelve a mostrar la atribución requerida en MapLibre; no debe desactivarse.
+
+Además, la política del Nominatim público limita el uso a un máximo absoluto de 1 petición/s y exige identificación/atribución. El hook actual no garantiza ese límite global cuando hay varias coordenadas distintas.
+
 ### Decisión v0.6
 
 - Mantener las coordenadas como fuente de verdad en Guardian/backend.
-- Informar claramente de que reverse-geocode usa un tercero.
+- Informar claramente de los terceros usados para mapa/geocode.
 - No enviar ubicaciones a servicios externos en background sin necesidad.
-- Considerar desactivar reverse-geocode o pasarlo por un servicio propio si se desea máxima privacidad.
+- Sustituir el reverse-geocode masivo del cliente por cache + rate limit centralizado, o eliminarlo del historial hasta tener esa capa.
+- Mantener atribución de OpenStreetMap/OpenFreeMap donde corresponda.
+- Considerar self-hosting/proxy de mapas o geocode si se desea máxima privacidad.
 - No registrar secretos, IMEI, IMSI, claves SIM ni coordenadas precisas en logs de producción por defecto.
 - Definir retención de historial antes de un despliegue permanente; no conservar ubicación indefinidamente por accidente.
 
@@ -581,6 +619,18 @@ Este presupuesto incluye:
 - gestión de reserva.
 
 No basta con medir únicamente el ESP32.
+
+### Telemetría de potencia
+
+El campo v1 `batteryMv` no basta para el producto final. La siguiente evolución del protocolo debe distinguir como mínimo:
+
+```text
+vehicleBatteryMv
+reserveBatteryMv?   // solo si la medición es fiable
+powerSource         // VEHICLE | RESERVE
+```
+
+Temperatura de la reserva y estado de carga solo se añaden si existe sensor/medición físicamente fiables. La app no mostrará porcentajes inferidos sin una base de medida válida.
 
 ### GNSS
 
@@ -720,7 +770,12 @@ GNSS OFF
 LIS3DH ON
 ```
 
-Hacer la prueba con la ruta de alimentación que realmente usaríamos.
+Hacer la prueba **al menos en dos condiciones**:
+
+- `P2a`: alimentación externa/VBUS;
+- `P2b`: alimentación desde batería.
+
+La diferencia importa porque LILYGO documenta el problema de sleep del módem con USB-C/VBUS. Si P2a no duerme, no se extrapola P2b ni se da por solucionado: se decide explícitamente si usar `DEEP`, validar una modificación de hardware, rediseñar la ruta de potencia o cambiar de plataforma.
 
 Si P2 rompe el presupuesto, `REMOTE_READY` deja de ser el modo por defecto.
 
@@ -731,8 +786,11 @@ Medir:
 - tiempo hasta registro;
 - media;
 - energía por evento;
+- tensión mínima observada durante el ciclo;
 - comportamiento con buena cobertura;
 - fallos/reintentos.
+
+El INA219 R100 sirve para energía/media, pero el shunt puede introducir una caída apreciable en la prueba directa a 5 V y no garantiza capturar el pico LTE más breve. Un reset o caída de bus invalida esa ejecución como medida representativa.
 
 #### P4. Wake + LTE + GNSS
 
@@ -787,7 +845,7 @@ Guardian **NO se instala permanentemente** si falla cualquiera de estos puntos:
 
 | Gate | Exigencia |
 | --- | --- |
-| Consumo | <= 2 mA medios adicionales desde 12 V en aparcamiento representativo |
+| Consumo | <= 2 mA medios adicionales desde 12 V en aparcamiento representativo; si el resultado queda cerca del límite, confirmar con instrumento independiente |
 | Protección batería coche | UVLO autónomo, histéresis y corriente residual validados |
 | Movimiento | LIS3DH despierta de forma fiable sin falsos positivos inaceptables |
 | LTE | timeouts/backoff probados, sin bucles de búsqueda indefinidos |
@@ -814,21 +872,25 @@ Guardian **NO se instala permanentemente** si falla cualquiera de estos puntos:
 
 ### Fase B - Seguridad de estado
 
-1. Implementar pairing BLE.
-2. Challenge-response.
-3. `PREALERT`.
-4. Inicio/fin de viaje confirmado por dispositivo.
-5. Eliminar la autoridad exclusiva de los endpoints actuales `trip/start|end`.
-6. Crear incidente de alerta separado del `DeviceState`.
+1. Diseñar claim/pairing inicial con presencia física y credencial de un solo uso.
+2. Implementar pairing BLE.
+3. Challenge-response local que funcione sin Internet.
+4. `PREALERT`.
+5. Inicio/fin de viaje confirmado por dispositivo.
+6. Separar estado reportado por Guardian de cualquier estado deseado/solicitud del backend.
+7. Eliminar la autoridad exclusiva de los endpoints actuales `trip/start|end`.
+8. Crear incidente de alerta separado del `DeviceState`.
+9. Evaluar Secure Boot + Flash Encryption para proteger credenciales ante acceso físico.
 
 ### Fase C - Comandos remotos
 
 1. `DeviceCommand`.
-2. `LOCATE_NOW`.
-3. ACK/TTL/idempotencia.
-4. Autenticación del dispositivo para lectura de comandos.
-5. UI de “Actualizar ubicación”.
-6. Probar primero con polling al despertar.
+2. Extender protocolo para correlation id y telemetría de potencia no ambigua.
+3. `LOCATE_NOW`.
+4. ACK/TTL/idempotencia.
+5. Autenticación del dispositivo para lectura de comandos.
+6. UI de “Actualizar ubicación”.
+7. Probar primero con polling al despertar.
 
 ### Fase D - Remote wake
 
@@ -857,12 +919,13 @@ Prioridad alta:
 - cifrar el secreto HMAC en reposo;
 - restringir CORS/orígenes de producción;
 - rate limit para OTP, creación de comandos y endpoints sensibles;
-- implementar transporte real de email OTP;
+- implementar transporte real de email OTP; producción permanece fail-closed hasta entonces;
 - separar configuración `development` / `production` con startup checks;
-- corregir provisioning `POST /v1/devices` y añadir pairing/claim explícito;
+- sustituir el provisioning técnico actual por pairing/claim explícito y seguro;
 - crear cola de comandos con schemas cerrados;
 - auditoría de comandos;
 - evitar coordenadas/secrets en logs;
+- cache/rate limit correcto para geocoding o retirar geocoding masivo del cliente;
 - tests de autorización cruzada entre dos propietarios;
 - tests de expiración/replay de comandos.
 
