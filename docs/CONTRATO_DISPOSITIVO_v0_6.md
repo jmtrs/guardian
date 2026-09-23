@@ -332,12 +332,14 @@ decisión del backend/dueño. Lo que sí debe respetar:
 
 | Pieza | Sitio |
 |---|---|
-| Contrato de eventos (decode) | `backend/src/devices/protocol.ts` |
-| Lógica de negocio (incidentes, ACK, anti-replay) | `backend/src/devices/devices.service.ts` |
+| Contrato de eventos (decode + firma + HKDF) | `backend/src/devices/protocol.ts` |
+| Lógica de negocio (incidentes, ACK, anti-replay, claim) | `backend/src/devices/devices.service.ts` |
 | Reglas puras de incidentes | `backend/src/devices/incident.ts` |
-| Endpoints dispositivo | `backend/src/devices/ingest.controller.ts`, `device-commands.controller.ts` (mismo archivo) |
+| Endpoints (Ingest, DeviceCommands, Devices, Incidents) | `backend/src/devices/ingest.controller.ts` (todas las clases en este archivo) |
+| Cifrado del secreto en reposo (K_root) | `backend/src/devices/secret-crypto.ts` |
+| Provisioning + claim (código de pairing) | `createDevice`/`claimDevice` en `devices.service.ts`, `backend/src/devices/claim-code.ts` |
 | Esquema BD | `backend/prisma/schema.prisma` |
-| Tests del contrato | `backend/src/devices/protocol.spec.ts`, `incident.spec.ts` |
-| Drives end-to-end | `backend/scripts/drive-pr1.ts`, `drive-pr2.ts` |
-| Bench manual | `backend/scripts/bench.ts` |
+| Tests del contrato | `backend/src/devices/protocol.spec.ts`, `incident.spec.ts`, `claim-code.spec.ts`, `secret-crypto.spec.ts` |
+| Drives end-to-end | `backend/scripts/drive-pr1.ts`, `drive-pr2.ts`, `drive-pr4.ts` |
+| Bench manual + simulador de dispositivo v2 | `backend/scripts/bench.ts`, `guardian/` (Python, referencia de firmware) |
 | Diseño (energía, BLE, wake) | `docs/GUARDIAN_INTEGRACION_APP_DISPOSITIVO_v0_6.md` |
