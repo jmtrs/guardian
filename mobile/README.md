@@ -37,7 +37,7 @@ configurable).
 ## Arranque
 
 Desde la raíz del monorepo, con el **backend levantado** (ver `../README.md` y
-`../backend`): `db-start`, `db-migrate`, `seed-device`, backend en `:3000`.
+`../backend`): `db-start`, `db-migrate`, `dev-backend` en `:3000`.
 
 ```bash
 # 1. Variables (API que verá la app)
@@ -67,11 +67,11 @@ dev build envía ese `Origin` a Better Auth.
 
 ## Poblar datos de prueba
 
-Con el dispositivo de banco sembrado (`node ../backend/scripts/seed-device.mjs`,
-imprime `GUARDIAN_DEVICE_KEY_HEX`), usa el simulador Python (`python3 -m
-guardian.simulator`) o firma eventos con HMAC contra `POST /v1/events`. Los eventos
-con `position` alimentan el mapa; `battery_low`/`suspected_movement` alimentan
-estado e historial.
+Aprovisiona y reclama un dispositivo de banco (`npx ts-node
+../backend/scripts/bench.ts provision "Sim"` + `... claim <email> <code>`), luego
+usa el simulador Python (`python3 -m guardian.simulator heartbeat|send|locate`) o
+`bench send`. Los eventos con `position` alimentan el mapa;
+`battery_low`/`suspected_movement` alimentan estado e historial.
 
 ## Calidad
 
