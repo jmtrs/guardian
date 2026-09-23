@@ -4,7 +4,7 @@ Vigilante personal independiente para un vehículo antiguo de 12 V: movimiento, 
 
 ## App (monorepo `backend/` + `mobile/`)
 
-Backend **NestJS + Prisma + PostgreSQL** con Better Auth (entrada por código OTP al email, sin contraseña ni teléfono) y app **Expo**. El endpoint de ingesta del dispositivo es `/v1/events` firmado con HMAC; el servidor Python queda como referencia de banco.
+Backend **NestJS + Prisma + PostgreSQL** con Better Auth (entrada por código OTP al email, sin contraseña ni teléfono) y app **Expo**. El endpoint de ingesta del dispositivo es `/v1/events` firmado con HMAC; el paquete Python `guardian/` es el simulador de dispositivo v2 y referencia de firmware.
 
 La app móvil incluye login OTP, dashboard con recuadros reordenables (ubicación,
 eventos, estado + iniciar/finalizar viaje), mapa con rastro del viaje (OpenFreeMap,
@@ -15,8 +15,9 @@ Detalle y arranque de la app: **[`mobile/README.md`](mobile/README.md)**.
 make setup          # pnpm install + prisma generate
 make db-start       # postgres docker
 make db-migrate     # prisma migrate dev
-node backend/scripts/seed-device.mjs   # dispositivo de banco (imprime GUARDIAN_DEVICE_KEY_HEX)
 make dev-backend    # Nest en :3000 (Swagger en /docs)
+# dispositivo de banco: provision + claim (ver "Simulador de dispositivo")
+cd backend && npx ts-node scripts/bench.ts provision "Sim"
 ```
 
 > **La app móvil requiere un _dev build_** (`cd mobile && pnpm android` / `pnpm ios`),
@@ -41,31 +42,38 @@ make dev-backend    # Nest en :3000 (Swagger en /docs)
 - **ESP32-S3 N16R8 + INA219 R100** como banco externo de medida conectado al Mac. No forman parte de la instalación final.
 - La **18650 Li-ion** se mantiene como candidata de reserva, pero no queda aprobada para carga permanente en el vehículo hasta validar protección térmica por hardware y consumo real.
 
-## Ejecutar simulación local
+## Simulador de dispositivo (referencia de firmware)
 
-Requiere Python 3.11 o 3.13 y únicamente biblioteca estándar.
+El paquete `guardian/` (Python puro, solo biblioteca estándar) implementa el
+**contrato v2** — HKDF-SHA256 por canal, HMAC sobre los bytes exactos, envelope
+con `power` obligatorio — y habla con el **backend Nest real**. Es la referencia
+ejecutable que el firmware (MicroPython/ESP-IDF) debe reproducir byte a byte.
+**No** es detección real: firma y envía como hará la placa.
 
-```bash
-python3 -m guardian.demo
-python3 -m unittest discover -s tests -v
-```
-
-La demo abre HTTP **solo en 127.0.0.1**, crea una clave temporal aleatoria, transmite un evento de movimiento **simulado** firmado mediante HMAC-SHA256, lo guarda en SQLite y cierra el servidor. `HTTP 202` significa aceptación del backend, **no** detección real, transmisión 4G, GPS o aviso real al móvil. Los tests verifican firmas, eventos malformados, rechazo de repetición y peticiones no autorizadas.
-
-Para ejecutar la simulación contra el **backend Nest real**:
+Autotest de cripto offline (sin red) y tests de contrato:
 
 ```bash
-make db-start && make db-migrate
-node backend/scripts/seed-device.mjs   # imprime GUARDIAN_DEVICE_KEY_HEX
-# copia los dos export que imprime
-make dev-backend &
-python3 -m guardian.simulator --kind suspected_movement
-# HTTP 202 aceptado | 409 replay | 401 firma mala | 400 envelope invalido
+python3 -m guardian.demo                    # HKDF + envelope + firma OK (offline)
+python3 -m unittest discover -s tests -v    # incluye el vector RFC 5869
 ```
 
-El simulador también sigue funcionando contra el servidor Python de banco (`python3 -m guardian.server`, puerto 8765) con `GUARDIAN_INGEST_URL=http://127.0.0.1:8765/v1/events`.
+Contra el backend real (aprovisiona con el banco, ver
+[contrato §7](docs/CONTRATO_DISPOSITIVO_v0_6.md)):
 
-No exponer HTTP local a Internet ni reutilizar claves de demo en hardware real.
+```bash
+make db-start && make db-migrate && make dev-backend &
+cd backend && npx ts-node scripts/bench.ts provision "Sim"   # imprime deviceId + secret + claimCode
+npx ts-node scripts/bench.ts claim <tu-email> <claimCode>    # reclama (o desde la app)
+export GUARDIAN_DEVICE_ID=...  GUARDIAN_DEVICE_SECRET_HEX=...  # lo que imprimió provision
+python3 -m guardian.simulator heartbeat            # HTTP 202 aceptado
+python3 -m guardian.simulator send suspected_movement
+python3 -m guardian.simulator locate               # poll + responde LOCATE_NOW con fix
+# 202 aceptado | 409 replay | 401 firma mala | 400 envelope invalido
+```
+
+La secuencia se persiste en un fichero local (análogo a la NVS de la placa) y
+solo avanza tras un `202`. No exponer el backend local a Internet ni reutilizar
+secretos de banco en hardware real.
 
 ## Próximos pasos
 

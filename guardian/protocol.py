@@ -1,75 +1,103 @@
-"""Signed bench event envelope, not a phone-to-car authorization protocol."""
+"""Contrato v2 dispositivo -> backend, en Python puro (stdlib).
+
+Referencia ejecutable del firmware: mismos bytes de clave y firma que el
+backend (`backend/src/devices/protocol.ts`). schemaVersion 2 es el UNICO
+contrato — sin legacy: `power` {vehicleMv, reserveMv?, source} obligatorio en
+todo evento, claves por contexto via HKDF-SHA256, HMAC sobre los bytes exactos
+del cuerpo. MicroPython/ESP-IDF deben reproducir esto byte a byte.
+"""
 import hashlib
 import hmac
 import json
 from datetime import datetime, timezone
 
-ALLOWED_TYPES = frozenset({"suspected_movement", "battery_low", "power_lost", "heartbeat", "gnss_fix"})
-MAX_BODY = 4096
+ALLOWED_TYPES = frozenset(
+    {"suspected_movement", "battery_low", "power_lost", "heartbeat", "gnss_fix"}
+)
+
+# info por canal — identico a KEY_INFO del backend. Una clave por contexto,
+# jamas reutilizada entre canales.
+KEY_INFO = {
+    "event": b"guardian/event/v1",
+    "command": b"guardian/command/v1",
+    "ble": b"guardian/ble/v1",
+}
 
 
-def encode_event(device_id: str, sequence: int, kind: str, *, battery_mv=None, position=None) -> bytes:
-    if not device_id or type(sequence) is not int or sequence < 1 or kind not in ALLOWED_TYPES:
-        raise ValueError("Invalid event envelope")
-    event = {
-        "schemaVersion": 1,
-        "deviceId": device_id,
-        "sequence": sequence,
-        "kind": kind,
-        "observedAtUtc": datetime.now(timezone.utc).isoformat(),
-        "batteryMv": battery_mv,
-        "position": position,
-    }
-    return json.dumps(event, sort_keys=True, separators=(",", ":")).encode("utf-8")
+def _hmac_sha256(key: bytes, msg: bytes) -> bytes:
+    return hmac.new(key, msg, hashlib.sha256).digest()
+
+
+def hkdf_sha256(ikm: bytes, salt: bytes, info: bytes, length: int = 32) -> bytes:
+    """HKDF-SHA256 (RFC 5869). Extract-then-expand; identico a Node hkdfSync."""
+    prk = _hmac_sha256(salt, ikm)  # extract
+    okm = b""
+    block = b""
+    counter = 1
+    while len(okm) < length:
+        block = _hmac_sha256(prk, block + info + bytes([counter]))
+        okm += block
+        counter += 1
+    return okm[:length]
+
+
+def derive_key(root_secret_hex: str, device_id: str, context: str) -> bytes:
+    """K_context = HKDF-SHA256(K_root, salt=deviceId, info='guardian/<ctx>/v1')."""
+    if context not in KEY_INFO:
+        raise ValueError(f"unknown key context: {context}")
+    return hkdf_sha256(
+        bytes.fromhex(root_secret_hex),
+        device_id.encode("utf-8"),
+        KEY_INFO[context],
+        32,
+    )
 
 
 def sign(body: bytes, key: bytes) -> str:
+    """HMAC-SHA256 hex sobre los bytes EXACTOS del cuerpo (64 chars)."""
     return hmac.new(key, body, hashlib.sha256).hexdigest()
 
 
-def verify(body: bytes, key: bytes, signature: str) -> bool:
-    return isinstance(signature, str) and len(signature) == 64 and hmac.compare_digest(sign(body, key), signature)
+def _now_iso() -> str:
+    # ISO 8601 con zona obligatoria (Z). Nunca hora local ambigua.
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def decode_event(body: bytes, expected_device_id: str) -> dict:
-    if len(body) > MAX_BODY:
-        raise ValueError("Event too large")
-    try:
-        data = json.loads(body)
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ValueError("Invalid JSON") from exc
-    if not isinstance(data, dict) or data.get("schemaVersion") != 1:
-        raise ValueError("Unsupported event version")
-    if data.get("deviceId") != expected_device_id:
-        raise ValueError("Device mismatch")
-    if type(data.get("sequence")) is not int or not 1 <= data["sequence"] < 2**63:
-        raise ValueError("Invalid sequence")
-    if data.get("kind") not in ALLOWED_TYPES:
-        raise ValueError("Unknown event type")
-    stamp = data.get("observedAtUtc")
-    if not isinstance(stamp, str) or len(stamp) > 64:
-        raise ValueError("Bad timestamp")
-    try:
-        when = datetime.fromisoformat(stamp)
-    except ValueError as exc:
-        raise ValueError("Bad timestamp") from exc
-    if when.tzinfo is None:
-        raise ValueError("Timezone required")
-    battery = data.get("batteryMv")
-    if battery is not None and (type(battery) is not int or not 0 <= battery <= 60000):
-        raise ValueError("Invalid battery reading")
-    position = data.get("position")
+def build_power(vehicle_mv: int, source: str = "vehicle", reserve_mv=None) -> dict:
+    power = {"vehicleMv": vehicle_mv, "source": source}
+    if reserve_mv is not None:
+        power["reserveMv"] = reserve_mv
+    return power
+
+
+def encode_event(
+    device_id: str,
+    sequence: int,
+    kind: str,
+    power: dict,
+    position=None,
+    command_id: str = None,
+    observed_at: str = None,
+) -> bytes:
+    """Envelope v2 -> bytes. Se firma y se envia ESTE buffer, sin re-serializar."""
+    if kind not in ALLOWED_TYPES:
+        raise ValueError(f"unknown kind: {kind}")
+    envelope = {
+        "schemaVersion": 2,
+        "deviceId": device_id,
+        "sequence": sequence,
+        "kind": kind,
+        "observedAtUtc": observed_at or _now_iso(),
+        "power": power,
+    }
+    if command_id is not None:
+        envelope["commandId"] = command_id
     if position is not None:
-        if not isinstance(position, dict) or set(position) != {"lat", "lon", "fixAtUtc"}:
-            raise ValueError("Invalid position")
-        lat, lon = position["lat"], position["lon"]
-        if (type(lat) not in (int, float) or type(lon) not in (int, float)
-                or not -90 <= lat <= 90 or not -180 <= lon <= 180):
-            raise ValueError("Invalid coordinates")
-        try:
-            fix_time = datetime.fromisoformat(position["fixAtUtc"])
-        except (ValueError, TypeError, KeyError) as exc:
-            raise ValueError("Invalid fix timestamp") from exc
-        if fix_time.tzinfo is None:
-            raise ValueError("Fix timezone required")
-    return data
+        envelope["position"] = position
+    return json.dumps(envelope, separators=(",", ":")).encode("utf-8")
+
+
+def encode_poll(device_id: str, polled_at: str = None) -> bytes:
+    """Cuerpo del poll de comandos (firmado con K_command)."""
+    body = {"deviceId": device_id, "polledAtUtc": polled_at or _now_iso()}
+    return json.dumps(body, separators=(",", ":")).encode("utf-8")
