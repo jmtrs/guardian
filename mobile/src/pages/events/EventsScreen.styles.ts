@@ -11,6 +11,12 @@ export function createStyles(theme: UITheme) {
       paddingTop: theme.tokens.spacing['14'],
       paddingBottom: theme.tokens.spacing['16'],
     },
+    // Sin eventos (cargando o vacio definitivo): el contenedor ocupa todo el
+    // alto para que el emptyWrap centre su contenido — el header queda arriba,
+    // igual que MapScreen sin posicion.
+    contentEmpty: {
+      flex: 1,
+    },
     // Cabecera propia: back + titulo — sin header bar del Stack.
     header: {
       flexDirection: 'row',
@@ -50,8 +56,12 @@ export function createStyles(theme: UITheme) {
       textAlign: 'center',
       marginTop: theme.tokens.spacing['8'],
     },
+    // Envoltorio del loader/EmptyState: centrado en el alto que sobra bajo
+    // el header, no en toda la pantalla.
     emptyWrap: {
-      height: 240,
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     // Pie de lista: spinner mientras carga la siguiente pagina (lazy load).
     footerLoader: {

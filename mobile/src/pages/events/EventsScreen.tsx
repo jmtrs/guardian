@@ -126,7 +126,9 @@ export function EventsScreen() {
         style={styles.canvas}
         data={events}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.content}
+        // Lista vacia: flex para que el EmptyState centre en pantalla (igual
+        // que el mapa sin posicion), no cuelgue arriba bajo el titulo.
+        contentContainerStyle={[styles.content, events.length === 0 && styles.contentEmpty]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -152,7 +154,9 @@ export function EventsScreen() {
               <ScreenLoader label={t('common.loading')} />
             </View>
           ) : (
-            <EmptyState glyph="◦" title={t('home.noEvents')} hint={t('home.noEventsHint')} />
+            <View style={styles.emptyWrap}>
+              <EmptyState glyph="◦" title={t('home.noEvents')} hint={t('home.noEventsHint')} />
+            </View>
           )
         }
         // Lazy load: al acercarse al final pide la siguiente pagina.
