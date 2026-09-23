@@ -1,15 +1,16 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 
 /**
- * Cifrado en reposo de la clave raiz del dispositivo (K_root). Antes viajaba en
- * claro en Postgres (TODO del schema); ahora se guarda cifrada con una master
- * key que vive FUERA de la base (env GUARDIAN_SECRET_KEY, KMS-ready). Solo se
- * descifra en memoria para verificar una firma; nunca se devuelve al cliente.
+ * Cifrado en reposo de la clave raiz del dispositivo (K_root). Se guarda cifrada
+ * con una master key que vive FUERA de la base (env GUARDIAN_SECRET_KEY,
+ * KMS-ready). Solo se descifra en memoria para verificar una firma; nunca se
+ * devuelve al cliente.
  *
  * Formato versionado: `enc:v1:<iv>:<tag>:<ct>` (base64). El prefijo permite
- * rotar el esquema sin adivinar, y distinguir de los secretos legado en claro
- * (sin prefijo) sin migracion de datos: un secreto viejo se lee tal cual y se
- * re-cifra la proxima vez que se escriba.
+ * rotar el esquema sin adivinar. Con master key configurada TODO secreto esta
+ * cifrado: un valor en claro (sin prefijo) es config invalida y falla —
+ * fail-closed, sin "compatibilidad" silenciosa. Solo en dev (sin master key) se
+ * opera en claro.
  *
  * AES-256-GCM: confidencialidad + integridad. Un secreto manipulado en la BD
  * falla el tag y no descifra (nunca produce una K_root silenciosamente falsa).
@@ -67,15 +68,19 @@ export function encryptSecret(plain: string): string {
 }
 
 /**
- * Descifra un secreto almacenado. Legado sin prefijo: se devuelve tal cual
- * (compatibilidad hacia atras, sin migracion). Un valor cifrado sin master key
- * es una mala configuracion: se lanza en vez de operar con una clave incorrecta.
+ * Descifra un secreto almacenado. Con master key configurada exige el prefijo
+ * `enc:v1:`: un secreto en claro es config invalida (fail-closed), nunca se
+ * confia en el silenciosamente. Solo sin master key (dev) el valor en claro se
+ * devuelve tal cual. Un valor cifrado sin master key tambien lanza.
  */
 export function decryptSecret(stored: string): string {
+  const key = masterKey();
   if (!isEncrypted(stored)) {
+    if (key) {
+      throw new Error('Plaintext device secret found but GUARDIAN_SECRET_KEY is set');
+    }
     return stored;
   }
-  const key = masterKey();
   if (!key) {
     throw new Error('Encrypted device secret found but GUARDIAN_SECRET_KEY is not set');
   }

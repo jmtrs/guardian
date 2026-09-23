@@ -254,8 +254,10 @@ export class DevicesService {
     const device = await this.prisma.device.findUnique({ where: { id: deviceId } });
     // Coste uniforme: un deviceId desconocido paga el mismo HKDF+HMAC que uno
     // valido (clave señuelo), para que la 401 tampoco enumere por tiempo. El
-    // secreto se descifra en memoria; el señuelo (sin prefijo) pasa tal cual.
-    const key = deriveKey(decryptSecret(device?.secret ?? DUMMY_ROOT_SECRET), deviceId, 'event');
+    // secreto real se descifra en memoria; el señuelo NO pasa por decryptSecret
+    // (es claro por diseño y con master key el descifrado exige prefijo).
+    const rootSecret = device ? decryptSecret(device.secret) : DUMMY_ROOT_SECRET;
+    const key = deriveKey(rootSecret, deviceId, 'event');
     if (!device || !verify(rawBody, key, signature)) {
       // 401 uniforme: no permitir enumerar deviceIds validos.
       throw new UnauthorizedException('Bad signature');
@@ -549,7 +551,9 @@ export class DevicesService {
   async pollCommands(deviceId: string, rawBody: Buffer, signature: string) {
     const device = await this.prisma.device.findUnique({ where: { id: deviceId } });
     // Mismo coste uniforme que ingest: la 401 no enumera por mensaje ni por tiempo.
-    const key = deriveKey(decryptSecret(device?.secret ?? DUMMY_ROOT_SECRET), deviceId, 'command');
+    // El señuelo NO pasa por decryptSecret (ver ingest).
+    const rootSecret = device ? decryptSecret(device.secret) : DUMMY_ROOT_SECRET;
+    const key = deriveKey(rootSecret, deviceId, 'command');
     if (!device || !verify(rawBody, key, signature)) {
       // 401 uniforme como ingest: no permitir enumerar deviceIds validos.
       throw new UnauthorizedException('Bad signature');

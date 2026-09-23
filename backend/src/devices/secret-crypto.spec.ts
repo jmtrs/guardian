@@ -35,10 +35,11 @@ describe('secret-crypto (cifrado del K_root en reposo)', () => {
     expect(verify(body, k, sign(body, deriveKey(rootHex, deviceId, 'event')))).toBe(true);
   });
 
-  it('legado sin prefijo: se devuelve tal cual (sin migracion)', () => {
-    const legacy = randomBytes(32).toString('hex');
-    expect(crypto.isEncrypted(legacy)).toBe(false);
-    expect(crypto.decryptSecret(legacy)).toBe(legacy);
+  it('con master key, un secreto en claro es config invalida: lanza (fail-closed)', () => {
+    const plaintext = randomBytes(32).toString('hex');
+    expect(crypto.isEncrypted(plaintext)).toBe(false);
+    // beforeEach ya fija GUARDIAN_SECRET_KEY: nunca confiar en un claro silencioso.
+    expect(() => crypto.decryptSecret(plaintext)).toThrow();
   });
 
   it('manipulacion en la BD falla el tag GCM (nunca K_root silenciosa)', () => {
@@ -64,6 +65,7 @@ describe('secret-crypto (cifrado del K_root en reposo)', () => {
     const noKey = require('./secret-crypto') as typeof import('./secret-crypto');
     const plain = randomBytes(32).toString('hex');
     expect(noKey.encryptSecret(plain)).toBe(plain); // dev: sin cifrar
+    expect(noKey.decryptSecret(plain)).toBe(plain); // dev: claro se lee tal cual
 
     process.env.NODE_ENV = 'production';
     expect(() => noKey.assertSecretKeyConfigured()).toThrow();
