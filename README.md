@@ -33,6 +33,7 @@ cd backend && npx ts-node scripts/bench.ts provision "Sim"
 - **[Alimentación y reserva para meses en el vehículo](docs/hardware/ALIMENTACION_Y_RESERVA.md)**. Decisión de mantener una única 18650 en la LILYGO **si** se verifica protección térmica real de carga, selección de celda, consumo y protección del vehículo. Es una especificación pendiente de ensayo, no una instalación validada.
 - **[Esquema eléctrico LILYGO V1.4, fuente oficial y lectura de la página de carga](docs/hardware/ESQUEMA_T_A7670X_V1_4.md)**. Enlaza al PDF del fabricante y documenta el circuito `CN3065`, `TEMP` y el puente `N9`; la coincidencia con nuestra unidad **R2** debe comprobarse físicamente.
 - [Componentes y banco de medida v0.6](docs/COMPONENTES.md).
+- **[Despliegue del backend](docs/DESPLIEGUE.md)**. Dockerfile, variables de producción y despliegue en homelab por túnel Cloudflare.
 
 ## Hardware elegido para la siguiente integración de banco
 
