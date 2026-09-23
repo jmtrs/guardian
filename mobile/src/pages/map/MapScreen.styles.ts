@@ -103,7 +103,13 @@ export function createStyles(theme: UITheme) {
       ...theme.elevation.raised,
       shadowColor: semantic.accent.warning,
     },
-    // Sin label sobre la direccion: la direccion encabeza la tarjeta.
+    // Calle completa en su linea; debajo, ciudad y coords en la misma
+    // linea (ciudad izquierda, coords pegadas a la derecha).
+    addressRow: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      gap: tokens.spacing['3'],
+    },
     infoAddress: {
       color: semantic.accent.warning,
       fontFamily: fontFamily.display,
@@ -112,30 +118,46 @@ export function createStyles(theme: UITheme) {
       textShadowColor: semantic.glow.text,
       textShadowRadius: 6,
     },
-    infoDetail: {
+    infoCity: {
+      flexShrink: 1,
       color: semantic.fg.secondary,
       fontFamily: fontFamily.ui.regular,
       fontSize: 13,
     },
     infoCoords: {
+      marginLeft: 'auto',
       color: semantic.fg.muted,
       fontFamily: fontFamily.ui.regular,
       fontSize: 12,
       letterSpacing: 0.5,
-      marginTop: tokens.spacing['1'],
     },
     navRow: {
       flexDirection: 'row',
       gap: tokens.spacing['3'],
       marginTop: tokens.spacing['3'],
     },
-    // Aviso de terceros: discreto pero legible, bajo los botones de navegacion.
+    // Aviso de terceros: una linea discreta bajo los botones de navegacion,
+    // tappable — abre el InfoSheet con el detalle de quien recibe que.
+    infoNoticeRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: tokens.spacing['2'],
+      marginTop: tokens.spacing['3'],
+      opacity: 1,
+    },
+    pressed: {
+      opacity: 0.6,
+    },
     infoNotice: {
       color: semantic.fg.muted,
       fontFamily: fontFamily.ui.regular,
       fontSize: 11,
       lineHeight: 15,
-      marginTop: tokens.spacing['3'],
+    },
+    infoNoticeMore: {
+      color: semantic.accent.warning,
+      fontSize: 11,
     },
     navButton: {
       flex: 1,

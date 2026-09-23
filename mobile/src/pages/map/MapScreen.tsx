@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, Pressable, Text, View } from 'react-native';
 import { Camera, GeoJSONSource, Layer, Map, Marker } from '@maplibre/maplibre-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -8,6 +8,7 @@ import { useDevicePositions, useDevices } from '@/api/devices';
 import { useReverseGeocode } from '@/lib/geocode';
 import { EmptyState } from '@/ui/composites/EmptyState';
 import { HUDButton } from '@/ui/composites/HUDButton';
+import { InfoSheet, type InfoSheetHandle } from '@/ui/composites/InfoSheet';
 import { ScreenFrame } from '@/ui/composites/ScreenFrame';
 import { useUITheme } from '@/ui/theme';
 
@@ -22,6 +23,8 @@ export function MapScreen() {
   const theme = useUITheme();
   const router = useRouter();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  // Aviso de privacidad: una linea siempre visible; el detalle, en InfoSheet.
+  const privacySheet = useRef<InfoSheetHandle>(null);
 
   const { data: devices } = useDevices({ refetchInterval: 10_000 });
   const device = devices?.[0];
@@ -145,15 +148,17 @@ export function MapScreen() {
 
       {/* Tarjeta inferior: direccion (reverse geocode) + coords + navegacion. */}
       <View style={styles.infoCard}>
-        <Text style={styles.infoAddress} numberOfLines={1}>
-          {addressLabel}
-        </Text>
-        {geo?.detail ? (
-          <Text style={styles.infoDetail} numberOfLines={1}>
-            {geo.detail}
+        <Text style={styles.infoAddress}>{addressLabel}</Text>
+        <View style={styles.addressRow}>
+          {geo?.detail ? (
+            <Text style={styles.infoCity} numberOfLines={1}>
+              {geo.detail}
+            </Text>
+          ) : null}
+          <Text style={styles.infoCoords} numberOfLines={1}>
+            {coords}
           </Text>
-        ) : null}
-        <Text style={styles.infoCoords}>{coords}</Text>
+        </View>
         <View style={styles.navRow}>
           <HUDButton
             label="Gmaps"
@@ -168,11 +173,29 @@ export function MapScreen() {
             labelStyle={styles.navButtonLabel}
           />
         </View>
-        {/* Aviso de terceros: el mapa/geocode usan OpenStreetMap; al abrir un
-            navegador externo se le envian las coordenadas. Privacidad explicita. */}
-        <Text style={styles.infoNotice}>{t('map.thirdPartyNotice')}</Text>
+        {/* Aviso de terceros, minimo y tappable: mapa/geocode via OSM; al
+            abrir Gmaps/Waze la coordenada sale a un tercero. Detalle: sheet. */}
+        <Pressable
+          onPress={() => privacySheet.current?.present()}
+          hitSlop={8}
+          style={({ pressed }) => [styles.infoNoticeRow, pressed && styles.pressed]}
+        >
+          <Text style={styles.infoNotice}>{t('map.thirdPartyNotice')}</Text>
+          <Text style={styles.infoNoticeMore}>ⓘ</Text>
+        </Pressable>
       </View>
       </View>
+      <InfoSheet
+        ref={privacySheet}
+        glyph="⌖"
+        title={t('map.privacyTitle')}
+        closeLabel={t('map.privacyClose')}
+        items={[
+          { glyph: '◈', text: t('map.privacyMap') },
+          { glyph: '⌂', text: t('map.privacyAddress') },
+          { glyph: '⇱', text: t('map.privacyNav') },
+        ]}
+      />
     </ScreenFrame>
   );
 }

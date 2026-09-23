@@ -82,8 +82,15 @@ export const es = {
     addressUnknown: 'Direccion desconocida',
     trailFromAlert: 'Rastro desde la alerta',
     trailFromTrip: 'Rastro del viaje',
-    thirdPartyNotice:
-      'Mapa y direcciones vía OpenStreetMap. Al abrir Google Maps o Waze envías las coordenadas a un tercero.',
+    thirdPartyNotice: 'OSM · Google/Waze reciben la coordenada',
+    privacyTitle: 'Privacidad del mapa',
+    privacyClose: 'Entendido',
+    privacyMap:
+      'El mapa (OpenFreeMap) y las direcciones (Nominatim, via tu backend) usan datos de OpenStreetMap. Sin Google, sin API keys, sin cuentas.',
+    privacyAddress:
+      'La direccion se resuelve en tu backend, con cache y limite global de 1 req/s hacia Nominatim: tu movil no habla directamente con ellos.',
+    privacyNav:
+      'Los botones Gmaps y Waze abren esa app con la coordenada del vehiculo. Desde ese momento el dato esta en sus servidores, no en los tuyos.',
     noPositionTitle: 'Sin posicion',
     noPositionHint: 'El dispositivo aun no ha reportado una posicion GNSS.',
   },
