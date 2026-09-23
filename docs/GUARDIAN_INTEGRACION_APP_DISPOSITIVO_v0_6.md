@@ -62,7 +62,8 @@ El banco Python continúa siendo útil como implementación de referencia y simu
 
 > Estado a septiembre de 2026: los huecos 2, 7, 9 y 10 están resueltos (PR1 + PR2); los
 > huecos 4, 5, 6 y 11 están resueltos (PR3 + PR3b, endurecimiento de despliegue y
-> privacidad, con retención de historial); el resto siguen abiertos. El contrato vigente entre placa, backend y app
+> privacidad, con retención de historial); el hueco 12 tiene su fundación resuelta
+> (PR4, claim/pairing con presencia en software); el resto siguen abiertos. El contrato vigente entre placa, backend y app
 > es `docs/CONTRATO_DISPOSITIVO_v0_6.md`. Visión de las cinco capas y recorrido de un dato
 > de punta a punta: `docs/MAPA_CONEXION_SISTEMA.md`.
 
@@ -99,8 +100,8 @@ El banco Python continúa siendo útil como implementación de referencia y simu
 11. ~~**El reverse-geocode del cliente no garantiza la política de Nominatim.**~~ **Resuelto (PR3).**  
     Proxy de backend `GET /v1/geocode/reverse` (autenticado): cache en memoria por coordenada redondeada + rate-limit GLOBAL serializado a ≤1 req/s hacia Nominatim + User-Agent propio. La app deja de llamar a Nominatim directamente (`mobile/src/lib/geocode.ts` consume el proxy). Ver `src/geocode/`.
 
-12. **Provisioning todavía no equivale a pairing seguro.**  
-    La revisión corrigió el binding `@Body()` de `POST /v1/devices`, pero falta un flujo de claim/pairing con presencia física y credenciales de un solo uso.
+12. ~~**Provisioning todavía no equivale a pairing seguro.**~~ **Resuelto (PR4, fundación).**  
+    El alta separa aprovisionar (banco/fábrica, dispositivo sin dueño, en ventana de pairing con código de un solo uso — en BD solo su hash) de reclamar (`POST /v1/devices/claim`, liga al dueño y quema el código, atómico y con rechazo uniforme). La app muestra el input de código cuando no hay dispositivo. Es la presencia física en software; el reto BLE criptográfico sigue diferido a firmware (§6) y sustituirá al código sin cambiar el contrato. Ver `CONTRATO_DISPOSITIVO_v0_6.md` §7.
 
 13. **OTP de producción queda cerrado hasta implementar entrega real.**  
     La revisión impide que códigos OTP terminen en logs de producción. Mientras no exista un transporte real de email, producción debe fallar de forma cerrada en vez de degradar a consola.

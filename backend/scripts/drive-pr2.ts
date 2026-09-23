@@ -52,7 +52,8 @@ async function main() {
   const user = await prisma.user.create({
     data: { id: randomUUID(), name: 'drive2', email: `${randomUUID()}@drive.test` },
   });
-  const { device, secret } = await svc.createDevice(user.id, 'drive-veh');
+  const { secret, claimCode } = await svc.createDevice('drive-veh');
+  const device = await svc.claimDevice(claimCode, user.id); // presencia -> dueño
   const id = device.id;
   const post = (body: Buffer) => svc.ingest(id, body, svc.signForTest(body, secret, id));
 

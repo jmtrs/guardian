@@ -1,9 +1,14 @@
 /**
  * Bench de banco para probar PR1/PR2 a mano contra el backend en marcha.
  *
- *   npx ts-node scripts/bench.ts provision <email> [nombre]
- *       Crea (o reutiliza) un dispositivo del usuario con ese email e imprime
- *       id + secret. El usuario debe haber iniciado sesion antes en la app.
+ *   npx ts-node scripts/bench.ts provision [nombre]
+ *       Aprovisiona un dispositivo SIN dueño (como la placa) e imprime
+ *       deviceId + secret + claimCode. La ventana de pairing es corta.
+ *
+ *   npx ts-node scripts/bench.ts claim <email> <code>
+ *       Reclama el dispositivo con su claimCode y lo liga al usuario de ese
+ *       email (debe haber iniciado sesion antes en la app). Presencia fisica
+ *       en software; el reto BLE queda diferido a firmware.
  *
  *   npx ts-node scripts/bench.ts send <email> <kind>
  *       Firma un evento v2 y lo POSTea a http://localhost:3000/v1/events con la
@@ -31,7 +36,7 @@
 import { PrismaService } from '../src/prisma/prisma.service';
 import { DevicesService } from '../src/devices/devices.service';
 import { sign, deriveKey } from '../src/devices/protocol';
-import { encryptSecret, decryptSecret } from '../src/devices/secret-crypto';
+import { decryptSecret } from '../src/devices/secret-crypto';
 
 const BASE = process.env.BENCH_BASE ?? 'http://localhost:3000';
 
@@ -48,22 +53,27 @@ async function main() {
   await prisma.$connect();
   try {
     if (cmd === 'provision') {
+      // Alta de banco/fabrica: crea SIN dueño (como la placa real). El slot de
+      // email aqui es el nombre del dispositivo. Imprime secret + claimCode una
+      // vez; el dueño lo reclama con `bench claim <email> <code>` (o desde app).
+      const name = process.argv[3] ?? 'Vehiculo';
+      const svc = new DevicesService(prisma);
+      const { device, secret, claimCode } = await svc.createDevice(name);
+      console.log('Dispositivo aprovisionado (sin dueño, en ventana de pairing).');
+      console.log(`  deviceId:  ${device.id}`);
+      console.log(`  secret:    ${secret}`);
+      console.log(`  claimCode: ${claimCode}`);
+      console.log(`Reclama con: bench claim <email> ${claimCode}`);
+      return;
+    }
+
+    if (cmd === 'claim') {
+      // arg = code (argv[4]); email = argv[3]. Liga el dispositivo al dueño.
       const user = await prisma.user.findUnique({ where: { email } });
       if (!user) throw new Error(`No hay usuario con email ${email}. Inicia sesion en la app primero.`);
-      let device = await prisma.device.findFirst({ where: { ownerId: user.id } });
-      if (!device) {
-        const { randomBytes } = await import('crypto');
-        // Mismo cifrado en reposo que el alta de la app: se guarda cifrado
-        // (con GUARDIAN_SECRET_KEY) y se imprime el claro una sola vez.
-        device = await prisma.device.create({
-          data: { name: arg ?? 'Vehiculo', secret: encryptSecret(randomBytes(32).toString('hex')), ownerId: user.id },
-        });
-        console.log('Dispositivo creado.');
-      } else {
-        console.log('Ya existia un dispositivo; reutilizo.');
-      }
-      console.log(`  deviceId: ${device.id}`);
-      console.log(`  secret:   ${decryptSecret(device.secret)}`);
+      const svc = new DevicesService(prisma);
+      const device = await svc.claimDevice(arg, user.id);
+      console.log(`Reclamado: ${device.id} -> ${email}`);
       return;
     }
 
@@ -218,7 +228,7 @@ async function main() {
       return;
     }
 
-    console.error('Comando desconocido. Usa: provision | send | locate | poll | fix | status');
+    console.error('Comando desconocido. Usa: provision | claim | send | locate | poll | fix | status');
     process.exit(1);
   } finally {
     await prisma.$disconnect();

@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Pressable, Text, TextInput, View } from 'react-native';
 import ReorderableList, {
   reorderItems,
   useReorderableDrag,
@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 
 import {
   useAcknowledgeIncident,
+  useClaimDevice,
   useDeviceCommands,
   useDeviceEvents,
   useDevices,
@@ -56,6 +57,48 @@ function DashCard({
     <Pressable onPress={onPress} onLongPress={drag} delayLongPress={250} style={style}>
       {children}
     </Pressable>
+  );
+}
+
+// Alta por presencia (software): sin dispositivos, el dueño teclea el codigo de
+// claim que imprimio el banco/placa. El reto BLE real queda diferido a firmware.
+function ClaimDeviceForm({
+  styles,
+}: {
+  styles: ReturnType<typeof createStyles>;
+}) {
+  const { t } = useTranslation();
+  const [code, setCode] = useState('');
+  const theme = useUITheme();
+  const claim = useClaimDevice();
+  const submit = () => {
+    const trimmed = code.trim();
+    if (trimmed.length > 0 && !claim.isPending) {
+      claim.mutate(trimmed, { onSuccess: () => setCode('') });
+    }
+  };
+  return (
+    <View style={styles.claimForm}>
+      <TextInput
+        style={styles.claimInput}
+        value={code}
+        onChangeText={setCode}
+        placeholder={t('home.claimPlaceholder')}
+        placeholderTextColor={theme.semantic.fg.muted}
+        autoCapitalize="characters"
+        autoCorrect={false}
+        maxLength={9}
+        editable={!claim.isPending}
+        onSubmitEditing={submit}
+        returnKeyType="done"
+      />
+      <HUDButton
+        label={t('home.claimAction')}
+        onPress={submit}
+        disabled={claim.isPending || code.trim().length === 0}
+      />
+      {claim.isError ? <Text style={styles.claimError}>{t('home.claimError')}</Text> : null}
+    </View>
   );
 }
 
@@ -361,6 +404,7 @@ export function DashboardScreen() {
         <View style={styles.staticContent}>
           {wordmark}
           <EmptyState glyph="⚠" title={t('home.noDeviceTitle')} hint={t('home.noDeviceHint')} />
+          <ClaimDeviceForm styles={styles} />
         </View>
       </ScreenFrame>
     );

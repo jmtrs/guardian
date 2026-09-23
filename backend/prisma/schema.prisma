@@ -125,8 +125,20 @@ model Device {
   // `enc:v1:iv:tag:ct`. Ver src/devices/secret-crypto.ts. Los secretos legado
   // en claro (sin prefijo) siguen validando y se re-cifran al reescribirse.
   secret     String
-  ownerId    String
-  owner      User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  // Propiedad diferida al claim: un dispositivo aprovisionado en banco/fabrica
+  // nace SIN dueño (ownerId null) y en ventana de pairing. El dueño lo reclama
+  // con un codigo de un solo uso desde la app (presencia fisica en software;
+  // el reto BLE criptografico queda diferido a firmware, docs §6). Ver claim*.
+  ownerId    String?
+  owner      User?       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  // Hash SHA-256 del codigo de claim (nunca el codigo en claro). Se pone al
+  // aprovisionar y se borra (null) al reclamar: es de un solo uso.
+  claimCodeHash    String?
+  // Fin de la ventana de pairing. Fuera de ella el claim se rechaza; se borra
+  // al reclamar. Un codigo sin ventana viva no vale.
+  pairingExpiresAt DateTime?
+  // Momento del claim (null = aun sin dueño). Trazabilidad del alta.
+  claimedAt        DateTime?
   state      DeviceState @default(ARMED)
   // Handshake del viaje (ver enum TripState). workshopUntil expira el modo
   // taller: mientras exista, el dispositivo esta en WORKSHOP, nunca ARMED.
@@ -151,6 +163,8 @@ model Device {
   incidents  Incident[]
   commands   Command[]
 
+  // Lookup del claim por hash del codigo (ventana corta, un solo uso).
+  @@index([claimCodeHash])
   @@map("devices")
 }
 
