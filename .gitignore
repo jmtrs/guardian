@@ -81,3 +81,5 @@ debug/
 __pycache__/
 *.pyc
 guardian-counter.sqlite3
+# Contador de secuencia local del simulador de dispositivo (analogo a NVS).
+.guardian_seq_*.json
