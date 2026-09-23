@@ -66,6 +66,10 @@ def _post(path: str, device_id: str, body: bytes, signature: str):
         method="POST",
         headers={
             "Content-Type": "application/json",
+            # Cloudflare (Browser Integrity Check) bloquea el UA por defecto de
+            # urllib con 403/1010. El firmware real debe mandar su propio UA:
+            # valor reservado para el canal de dispositivo.
+            "User-Agent": "Guardian-Device/2",
             "X-Device-Id": device_id,
             "X-Guardian-Signature": signature,
         },
