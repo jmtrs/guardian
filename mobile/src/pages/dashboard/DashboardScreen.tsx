@@ -24,7 +24,6 @@ import { LaneStripe } from '@/ui/assets/placeholders';
 import { AlertPulse } from '@/ui/composites/AlertPulse';
 import { EmptyState } from '@/ui/composites/EmptyState';
 import { HUDButton } from '@/ui/composites/HUDButton';
-import { Reveal } from '@/ui/composites/Reveal';
 import { ScreenFrame } from '@/ui/composites/ScreenFrame';
 import { ScreenLoader } from '@/ui/composites/ScreenLoader';
 import { useDashboardOrder, type DashboardCard } from '@/lib/dashboard-order';
@@ -62,11 +61,7 @@ function DashCard({
 
 // Alta por presencia (software): sin dispositivos, el dueño teclea el codigo de
 // claim que imprimio el banco/placa. El reto BLE real queda diferido a firmware.
-function ClaimDeviceForm({
-  styles,
-}: {
-  styles: ReturnType<typeof createStyles>;
-}) {
+function ClaimDeviceForm({ styles }: { styles: ReturnType<typeof createStyles> }) {
   const { t } = useTranslation();
   const [code, setCode] = useState('');
   const theme = useUITheme();
@@ -75,7 +70,10 @@ function ClaimDeviceForm({
   // esto es facil teclear mal o creer que el guion hay que ponerlo a mano.
   // (El backend normaliza igual; esto es solo UX.)
   const formatCode = (raw: string) => {
-    const clean = raw.toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 8);
+    const clean = raw
+      .toUpperCase()
+      .replace(/[^0-9A-Z]/g, '')
+      .slice(0, 8);
     return clean.length > 4 ? `${clean.slice(0, 4)}-${clean.slice(4)}` : clean;
   };
   const submit = () => {
@@ -139,8 +137,8 @@ export function DashboardScreen() {
   // vehiculo (mostrar 13.6V miente si la de ~4V esta alimentando).
   const effectiveMv =
     device?.lastPowerSource === 'reserve'
-      ? device?.lastReserveMv ?? null
-      : device?.lastVehicleMv ?? null;
+      ? (device?.lastReserveMv ?? null)
+      : (device?.lastVehicleMv ?? null);
   const powerSourceText =
     device?.lastPowerSource === 'vehicle'
       ? t('home.powerVehicle')
@@ -208,7 +206,7 @@ export function DashboardScreen() {
       : geo?.label || t('map.addressUnknown');
 
   const wordmark = (
-    <Reveal delay={0} style={styles.wordmarkRow}>
+    <View style={styles.wordmarkRow}>
       <Text style={styles.wordmark}>{t('home.title')}</Text>
       <View style={styles.actions}>
         <Pressable
@@ -220,7 +218,7 @@ export function DashboardScreen() {
           <Text style={styles.gearIcon}>⚙</Text>
         </Pressable>
       </View>
-    </Reveal>
+    </View>
   );
 
   // Recuadros memoizados: referencia estable entre renders → al reordenar la
@@ -404,7 +402,7 @@ export function DashboardScreen() {
 
   if (isLoading) {
     return (
-      <ScreenFrame animated={false}>
+      <ScreenFrame>
         <ScreenLoader label={t('common.loading')} />
       </ScreenFrame>
     );

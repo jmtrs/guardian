@@ -1,12 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
@@ -35,25 +28,21 @@ export function VerifyScreen() {
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   const androidKeyboardHeight = useAndroidKeyboardHeight();
-  const email = String(params.email || '').trim().toLowerCase();
+  const email = String(params.email || '')
+    .trim()
+    .toLowerCase();
   const [code, setCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isResending, setIsResending] = useState(false);
-  const [resendCooldownSeconds, setResendCooldownSeconds] = useState(
-    OTP_RESEND_COOLDOWN_SECONDS
-  );
+  const [resendCooldownSeconds, setResendCooldownSeconds] = useState(OTP_RESEND_COOLDOWN_SECONDS);
   const [error, setError] = useState<string | undefined>(undefined);
 
-  const resendDisabled = getOtpResendDisabled(
-    isLoading,
-    isResending,
-    resendCooldownSeconds
-  );
+  const resendDisabled = getOtpResendDisabled(isLoading, isResending, resendCooldownSeconds);
   const resendLabel = getOtpResendLabel(
     t,
     resendCooldownSeconds,
     'auth.resendCountdown',
-    'auth.resendCode'
+    'auth.resendCode',
   );
 
   useEffect(() => {
@@ -99,7 +88,6 @@ export function VerifyScreen() {
     if (CODE_REGEX.test(code)) {
       handleVerifyCode();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
 
   const handleResendCode = async () => {
@@ -161,44 +149,44 @@ export function VerifyScreen() {
   return (
     <ScreenFrame>
       <View style={styles.keyboardContainer}>
-      <View style={styles.headerFixed}>
-        <Text style={styles.title}>{t('auth.verifyTitle')}</Text>
-        <Text style={styles.subtitle}>{t('auth.verifySubtitle')}</Text>
-        <Text style={styles.email}>{email}</Text>
-      </View>
+        <View style={styles.headerFixed}>
+          <Text style={styles.title}>{t('auth.verifyTitle')}</Text>
+          <Text style={styles.subtitle}>{t('auth.verifySubtitle')}</Text>
+          <Text style={styles.email}>{email}</Text>
+        </View>
 
-      {Platform.OS === 'ios' ? (
-        <KeyboardAvoidingView
-          style={styles.formArea}
-          behavior="padding"
-          keyboardVerticalOffset={24}
-        >
+        {Platform.OS === 'ios' ? (
+          <KeyboardAvoidingView
+            style={styles.formArea}
+            behavior="padding"
+            keyboardVerticalOffset={24}
+          >
+            <ScrollView
+              style={styles.formArea}
+              contentContainerStyle={styles.iosFormContent}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              showsVerticalScrollIndicator={false}
+              automaticallyAdjustKeyboardInsets
+            >
+              {formContent}
+            </ScrollView>
+          </KeyboardAvoidingView>
+        ) : (
           <ScrollView
             style={styles.formArea}
-            contentContainerStyle={styles.iosFormContent}
+            contentContainerStyle={[
+              styles.androidFormContent,
+              { paddingBottom: androidKeyboardHeight + theme.tokens.spacing['6'] },
+            ]}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator={false}
-            automaticallyAdjustKeyboardInsets
+            overScrollMode="never"
           >
             {formContent}
           </ScrollView>
-        </KeyboardAvoidingView>
-      ) : (
-        <ScrollView
-          style={styles.formArea}
-          contentContainerStyle={[
-            styles.androidFormContent,
-            { paddingBottom: androidKeyboardHeight + theme.tokens.spacing['6'] },
-          ]}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          showsVerticalScrollIndicator={false}
-          overScrollMode="never"
-        >
-          {formContent}
-        </ScrollView>
-      )}
+        )}
       </View>
     </ScreenFrame>
   );

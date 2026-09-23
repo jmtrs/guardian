@@ -6,14 +6,7 @@ import { useTranslation } from 'react-i18next';
 
 import { authClient } from '@/api/auth-client';
 import { ScreenFrame } from '@/ui/composites/ScreenFrame';
-import { Reveal } from '@/ui/composites/Reveal';
-import {
-  accentFromHue,
-  hueOfHex,
-  THEME_PRESETS,
-  useThemeControls,
-  useUITheme,
-} from '@/ui/theme';
+import { accentFromHue, hueOfHex, THEME_PRESETS, useThemeControls, useUITheme } from '@/ui/theme';
 
 import { createStyles } from './SettingsScreen.styles';
 
@@ -35,7 +28,7 @@ export function SettingsScreen() {
   return (
     <ScreenFrame>
       <ScrollView contentContainerStyle={styles.content}>
-        <Reveal delay={0} style={styles.header}>
+        <View style={styles.header}>
           <Pressable
             onPress={() => router.back()}
             hitSlop={12}
@@ -44,10 +37,10 @@ export function SettingsScreen() {
             <Text style={styles.backIcon}>←</Text>
           </Pressable>
           <Text style={styles.title}>{t('settings.title')}</Text>
-        </Reveal>
+        </View>
 
         {/* APPEARANCE */}
-        <Reveal delay={60} style={styles.section}>
+        <View style={styles.section}>
           <Text style={styles.sectionLabel}>{t('settings.appearance')}</Text>
 
           <View style={styles.panel}>
@@ -66,9 +59,7 @@ export function SettingsScreen() {
                       pressed && styles.chipPressed,
                     ]}
                   >
-                    <View
-                      style={[styles.chipSwatch, { backgroundColor: preset.accent }]}
-                    />
+                    <View style={[styles.chipSwatch, { backgroundColor: preset.accent }]} />
                     <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>
                       {preset.label}
                     </Text>
@@ -83,9 +74,7 @@ export function SettingsScreen() {
                   pressed && styles.chipPressed,
                 ]}
               >
-                <Text style={[styles.chipLabel, isCustom && styles.chipLabelActive]}>
-                  CUSTOM
-                </Text>
+                <Text style={[styles.chipLabel, isCustom && styles.chipLabelActive]}>CUSTOM</Text>
               </Pressable>
             </View>
 
@@ -117,10 +106,10 @@ export function SettingsScreen() {
               </View>
             ) : null}
           </View>
-        </Reveal>
+        </View>
 
         {/* LANGUAGE */}
-        <Reveal delay={120} style={styles.section}>
+        <View style={styles.section}>
           <Text style={styles.sectionLabel}>{t('settings.language')}</Text>
           <View style={styles.panel}>
             <View style={styles.chipRow}>
@@ -144,10 +133,10 @@ export function SettingsScreen() {
               })}
             </View>
           </View>
-        </Reveal>
+        </View>
 
         {/* SESSION */}
-        <Reveal delay={180} style={styles.section}>
+        <View style={styles.section}>
           <Text style={styles.sectionLabel}>{t('settings.session')}</Text>
           <Pressable
             onPress={() => authClient.signOut()}
@@ -155,7 +144,7 @@ export function SettingsScreen() {
           >
             <Text style={styles.logoutText}>{t('auth.logout')}</Text>
           </Pressable>
-        </Reveal>
+        </View>
       </ScrollView>
     </ScreenFrame>
   );
