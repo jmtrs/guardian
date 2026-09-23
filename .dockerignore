@@ -1,0 +1,12 @@
+# Contexto de build del backend (backend/Dockerfile). Fuera lo pesado/irrelevante.
+**/node_modules
+**/dist
+**/.expo
+mobile/android
+mobile/ios
+.git
+**/.env
+**/.env.*
+**/*.log
+guardian/__pycache__
+tests/__pycache__
