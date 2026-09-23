@@ -107,10 +107,19 @@ export class DevicesService {
     return device;
   }
 
-  listEvents(deviceId: string, ownerId: string, limit = 50) {
+  /**
+   * Historial paginado por cursor. Orden por `seq` descendente (monotonico por
+   * dispositivo = mismo orden que observedAt, pero cursor estable e inmune al
+   * skew de reloj): la pagina siguiente pide `cursorSeq` = seq del ultimo visto
+   * y trae los estrictamente menores. Sin cursor: la pagina mas reciente.
+   */
+  listEvents(deviceId: string, ownerId: string, limit = 20, cursorSeq?: number) {
     return this.prisma.deviceEvent.findMany({
-      where: { device: { id: deviceId, ownerId } },
-      orderBy: { observedAt: 'desc' },
+      where: {
+        device: { id: deviceId, ownerId },
+        ...(cursorSeq !== undefined ? { seq: { lt: cursorSeq } } : {}),
+      },
+      orderBy: { seq: 'desc' },
       take: Math.min(Math.max(limit, 1), 200),
     });
   }

@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiClient } from './client';
 
@@ -136,6 +136,28 @@ export function useDeviceEvents(
     },
     enabled: Boolean(deviceId),
     refetchInterval: options?.refetchInterval,
+  });
+}
+
+// Historial paginado por cursor (pantalla de eventos). Primera pagina = los
+// `pageSize` mas recientes; el scroll pide la siguiente con el seq del ultimo
+// visto. Pull-to-refresh recarga solo la primera pagina (novedades arriba), no
+// vuelve a bajar todo lo ya cargado. Distinto de useDeviceEvents (lista corta
+// fija del dashboard).
+export function useDeviceEventsInfinite(deviceId: string | undefined, pageSize = 20) {
+  return useInfiniteQuery({
+    queryKey: [...deviceKeys.events(deviceId ?? 'none'), 'infinite', pageSize],
+    queryFn: async ({ pageParam }) => {
+      const response = await apiClient.get<DeviceEvent[]>(`/v1/devices/${deviceId}/events`, {
+        params: { limit: pageSize, ...(pageParam ? { cursor: pageParam } : {}) },
+      });
+      return response.data;
+    },
+    initialPageParam: undefined as number | undefined,
+    // Hay mas si la ultima pagina vino llena; el cursor es el seq del ultimo.
+    getNextPageParam: (lastPage) =>
+      lastPage.length === pageSize ? lastPage[lastPage.length - 1].seq : undefined,
+    enabled: Boolean(deviceId),
   });
 }
 
