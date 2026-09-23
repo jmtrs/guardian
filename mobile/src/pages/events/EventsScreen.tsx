@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 import type { TFunction } from 'i18next';
 
 import type { DeviceEvent } from '@/api/devices';
-import { useDeviceEvents, useDevices } from '@/api/devices';
+import { deviceKeys, useDeviceEventsInfinite, useDevices } from '@/api/devices';
 import { useReverseGeocode } from '@/lib/geocode';
 import { EmptyState } from '@/ui/composites/EmptyState';
 import { ScreenFrame } from '@/ui/composites/ScreenFrame';
@@ -83,16 +84,36 @@ export function EventsScreen() {
   const router = useRouter();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
+  const PAGE_SIZE = 20;
+  const queryClient = useQueryClient();
   const { data: devices } = useDevices({ refetchInterval: 10_000 });
   const device = devices?.[0];
-  const { data: events, isLoading, refetch } = useDeviceEvents(device?.id, 100, {
-    refetchInterval: 10_000,
-  });
-  // Spinner solo en pull manual: el polling de 10s NO debe mostrar el indicador.
+  const { data, isLoading, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useDeviceEventsInfinite(device?.id, PAGE_SIZE);
+  // Aplana las paginas cargadas en una sola lista para el FlatList.
+  const events = useMemo(() => data?.pages.flat() ?? [], [data]);
+
+  // Scroll al final: pide la siguiente pagina (lazy load), nunca en paralelo.
+  const onEndReached = () => {
+    if (hasNextPage && !isFetchingNextPage) {
+      void fetchNextPage();
+    }
+  };
+
+  // Pull-to-refresh = "busca si hay algo nuevo": descarta las paginas extra y
+  // recarga SOLO la primera (los mas recientes arriba), sin volver a bajar todo
+  // lo que ya se habia paginado.
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = async () => {
     setRefreshing(true);
     try {
+      if (device?.id) {
+        queryClient.setQueryData<{ pages: DeviceEvent[][]; pageParams: unknown[] }>(
+          [...deviceKeys.events(device.id), 'infinite', PAGE_SIZE],
+          (prev) =>
+            prev ? { pages: prev.pages.slice(0, 1), pageParams: prev.pageParams.slice(0, 1) } : prev,
+        );
+      }
       await refetch();
     } finally {
       setRefreshing(false);
@@ -133,6 +154,17 @@ export function EventsScreen() {
           ) : (
             <EmptyState glyph="◦" title={t('home.noEvents')} hint={t('home.noEventsHint')} />
           )
+        }
+        // Lazy load: al acercarse al final pide la siguiente pagina.
+        onEndReached={onEndReached}
+        onEndReachedThreshold={0.5}
+        initialNumToRender={PAGE_SIZE}
+        ListFooterComponent={
+          isFetchingNextPage ? (
+            <View style={styles.footerLoader}>
+              <ActivityIndicator color={theme.semantic.accent.warning} />
+            </View>
+          ) : null
         }
         renderItem={({ item }) => <EventRow item={item} styles={styles} t={t} />}
       />

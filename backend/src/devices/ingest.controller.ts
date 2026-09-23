@@ -70,10 +70,19 @@ export class DevicesController {
   }
 
   @Get(':id/events')
-  events(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Query('limit') limit?: string) {
+  events(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Query('limit') limit?: string,
+    @Query('cursor') cursor?: string,
+  ) {
     const parsed = limit !== undefined ? Number(limit) : NaN;
-    const safeLimit = Number.isFinite(parsed) ? Math.trunc(parsed) : 50;
-    return this.devices.listEvents(id, req.user!.id, safeLimit);
+    const safeLimit = Number.isFinite(parsed) ? Math.trunc(parsed) : 20;
+    // Cursor = seq del ultimo evento ya visto. Basura -> se ignora (primera pagina).
+    const parsedCursor = cursor !== undefined ? Number(cursor) : NaN;
+    const cursorSeq =
+      Number.isFinite(parsedCursor) && parsedCursor > 0 ? Math.trunc(parsedCursor) : undefined;
+    return this.devices.listEvents(id, req.user!.id, safeLimit, cursorSeq);
   }
 
   @Get(':id/positions')

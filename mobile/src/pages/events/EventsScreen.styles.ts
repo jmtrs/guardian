@@ -53,6 +53,10 @@ export function createStyles(theme: UITheme) {
     emptyWrap: {
       height: 240,
     },
+    // Pie de lista: spinner mientras carga la siguiente pagina (lazy load).
+    footerLoader: {
+      paddingVertical: theme.tokens.spacing['4'],
+    },
     // Timeline: rail izquierdo con glifos + linea que conecta.
     timelineRow: {
       flexDirection: 'row',
