@@ -1,0 +1,68 @@
+# Despliegue self-hosted (homelab). Imagen construida en GitHub (deploy.yml) y
+# descargada de GHCR — el N100 nunca recompila. Watchtower vigila GHCR y
+# reinicia con cada imagen nueva (push a main llega al homelab en minutos).
+#
+#   docker compose -f docker-compose.homelab.yml up -d
+#
+# Secretos en un .env junto a este archivo (docker compose lo autocarga). Ver
+# homelab/services/guardian/.env.example.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: guardian_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-guardian}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-guardian}
+    volumes:
+      - guardian_pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-guardian}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    image: ghcr.io/jmtrs/guardian:latest
+    container_name: guardian_backend
+    pull_policy: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-guardian}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-guardian}
+      NODE_ENV: production
+      PORT: 3000
+      GUARDIAN_SECRET_KEY: ${GUARDIAN_SECRET_KEY:?set GUARDIAN_SECRET_KEY}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-https://gtapi.aggc.dev}
+      TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-guardian://}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-Guardian <noreply@aggc.dev>}
+      RETENTION_DAYS: ${RETENTION_DAYS:-90}
+      PAIRING_WINDOW_MIN: ${PAIRING_WINDOW_MIN:-15}
+    ports:
+      - "${GUARDIAN_PORT:-3000}:3000"
+    # DNS del homelab flaky (ver mobilede DEPLOY.md): reintentos glibc.
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    dns_opt:
+      - timeout:2
+      - attempts:3
+      - rotate
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    restart: unless-stopped
+
+  # Auto-pull: vigila solo contenedores etiquetados, revisa GHCR cada 5 min.
+  watchtower:
+    image: containrrr/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --interval 300 --cleanup --label-enable
+    restart: unless-stopped
+
+volumes:
+  guardian_pgdata:
