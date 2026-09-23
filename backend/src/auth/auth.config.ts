@@ -5,6 +5,7 @@ import { expo } from '@better-auth/expo';
 import type { PrismaClient } from '@prisma/client';
 
 import { trustedOrigins } from '../config/origins';
+import { readTemporaryLoginOtp } from './temporary-login-otp';
 
 /**
  * Tipo estructural: solo exponemos lo que usamos (handler Web + api).
@@ -19,17 +20,17 @@ export type AuthSessionUser = {
 export type Auth = {
   handler: (request: Request) => Promise<Response>;
   api: {
-    getSession: (options: { headers: Headers }) => Promise<
-      | {
-          session: { id: string; userId: string; token: string };
-          user: AuthSessionUser;
-        }
-      | null
-    >;
+    getSession: (options: { headers: Headers }) => Promise<{
+      session: { id: string; userId: string; token: string };
+      user: AuthSessionUser;
+    } | null>;
   };
 };
 
 export function createAuth(prisma: PrismaClient, baseUrl: string, secret: string): Auth {
+  const temporaryLoginOtp =
+    process.env.NODE_ENV === 'production' ? readTemporaryLoginOtp() : undefined;
+
   return betterAuth({
     database: prismaAdapter(prisma, {
       provider: 'postgresql',
@@ -50,13 +51,31 @@ export function createAuth(prisma: PrismaClient, baseUrl: string, secret: string
         otpLength: 6,
         expiresIn: 60 * 10, // 10 minutos
         allowedAttempts: 5,
-        // Solo dev: OTP fijo 000000 para iterar rapido sin abrir el log.
-        // En produccion no se define generateOTP → aleatorio.
-        ...(process.env.NODE_ENV !== 'production'
-          ? { generateOTP: () => '000000' }
-          : {}),
+        generateOTP: ({ email, type }) => {
+          // Dev conserva el codigo conocido para iterar localmente. En prod, el
+          // bypass temporal exige email + codigo secretos y solo sirve para login.
+          if (process.env.NODE_ENV !== 'production') {
+            return '000000';
+          }
+          if (
+            temporaryLoginOtp &&
+            type === 'sign-in' &&
+            email.trim().toLowerCase() === temporaryLoginOtp.email
+          ) {
+            return temporaryLoginOtp.code;
+          }
+          return undefined; // Better Auth genera un OTP aleatorio.
+        },
         async sendVerificationOTP({ email, otp, type }) {
           if (process.env.NODE_ENV === 'production') {
+            if (
+              temporaryLoginOtp &&
+              type === 'sign-in' &&
+              email.trim().toLowerCase() === temporaryLoginOtp.email &&
+              otp === temporaryLoginOtp.code
+            ) {
+              return;
+            }
             // Envio real por email (Resend REST, sin dependencia). Si no hay
             // clave configurada se falla CERRADO: nunca se degrada a consola ni
             // se loguea el codigo en produccion.
