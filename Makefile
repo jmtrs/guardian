@@ -1,7 +1,7 @@
 # Guardian Makefile
 # Cross-platform: delegates to Node.js scripts for Windows compatibility
 
-.PHONY: help setup dev dev-backend dev-mobile test test-backend test-mobile build lint typecheck db-start db-stop db-migrate db-deploy db-studio db-generate deploy deploy-backend sync status clean
+.PHONY: help setup dev dev-backend dev-mobile test test-backend test-mobile build lint typecheck db-start db-stop db-migrate db-deploy db-studio db-generate deploy deploy-backend sync status clean sim-prod
 
 help:
 	@echo "Guardian - Available Commands"
@@ -35,6 +35,7 @@ help:
 	@echo "  Utilities:"
 	@echo "    make status         Show git status and project info"
 	@echo "    make clean          Clean build artifacts and node_modules"
+	@echo "    make sim-prod       Simulate device events against PROD (KIND=gnss_fix N=3)"
 
 # ============================================
 # Setup & Development
@@ -121,3 +122,17 @@ status:
 
 clean:
 	@pnpm run clean
+
+# ============================================
+# Simulacion contra PROD (homelab)
+# ============================================
+
+# Empuja eventos v2 al backend de prod para probar la app en vivo. El K_root no
+# sale del homelab (ver backend/scripts/prod-sim.sh). Ejemplos:
+#   make sim-prod                       # 3 gnss_fix moviendose
+#   make sim-prod KIND=heartbeat        # un latido
+#   make sim-prod KIND=gnss_fix N=6     # 6 fixes
+KIND ?= gnss_fix
+N ?= 3
+sim-prod:
+	@bash backend/scripts/prod-sim.sh $(KIND) $(N)
