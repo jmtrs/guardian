@@ -86,18 +86,33 @@ export class DevicesService {
    */
   async createDevice(name: string) {
     const secret = randomBytes(32).toString('hex');
-    const claimCode = generateClaimCode();
-    const device = await this.prisma.device.create({
-      data: {
-        name,
-        secret: encryptSecret(secret),
-        claimCodeHash: hashClaimCode(claimCode),
-        pairingExpiresAt: new Date(Date.now() + PAIRING_WINDOW_MS),
-      },
-      select: DEVICE_PUBLIC_FIELDS,
-    });
-    // Secreto y codigo viajan una sola vez, en el aprovisionamiento.
-    return { device, secret, claimCode };
+    // claimCodeHash es @unique: una colision (astronomicamente rara) es un P2002;
+    // se regenera el codigo y se reintenta en vez de fallar el aprovisionamiento.
+    for (let attempt = 0; ; attempt++) {
+      const claimCode = generateClaimCode();
+      try {
+        const device = await this.prisma.device.create({
+          data: {
+            name,
+            secret: encryptSecret(secret),
+            claimCodeHash: hashClaimCode(claimCode),
+            pairingExpiresAt: new Date(Date.now() + PAIRING_WINDOW_MS),
+          },
+          select: DEVICE_PUBLIC_FIELDS,
+        });
+        // Secreto y codigo viajan una sola vez, en el aprovisionamiento.
+        return { device, secret, claimCode };
+      } catch (error) {
+        if (
+          attempt < 3 &&
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002'
+        ) {
+          continue;
+        }
+        throw error;
+      }
+    }
   }
 
   /**
@@ -109,8 +124,10 @@ export class DevicesService {
    */
   async claimDevice(code: string, userId: string) {
     const hash = hashClaimCode(code);
-    const target = await this.prisma.device.findFirst({
-      where: { claimCodeHash: hash, ownerId: null, pairingExpiresAt: { gt: new Date() } },
+    // claimCodeHash es @unique: findUnique da el dispositivo exacto (o null),
+    // sin ambiguedad. La validacion de ventana/estado la sella el updateMany.
+    const target = await this.prisma.device.findUnique({
+      where: { claimCodeHash: hash },
       select: { id: true },
     });
     if (!target) {

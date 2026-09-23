@@ -132,8 +132,10 @@ model Device {
   ownerId    String?
   owner      User?       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   // Hash SHA-256 del codigo de claim (nunca el codigo en claro). Se pone al
-  // aprovisionar y se borra (null) al reclamar: es de un solo uso.
-  claimCodeHash    String?
+  // aprovisionar y se borra (null) al reclamar: es de un solo uso. @unique
+  // impide dos codigos activos con el mismo hash (Postgres admite varios NULL,
+  // asi que los codigos ya quemados no chocan entre si).
+  claimCodeHash    String?   @unique
   // Fin de la ventana de pairing. Fuera de ella el claim se rechaza; se borra
   // al reclamar. Un codigo sin ventana viva no vale.
   pairingExpiresAt DateTime?
@@ -163,8 +165,6 @@ model Device {
   incidents  Incident[]
   commands   Command[]
 
-  // Lookup del claim por hash del codigo (ventana corta, un solo uso).
-  @@index([claimCodeHash])
   @@map("devices")
 }
 
