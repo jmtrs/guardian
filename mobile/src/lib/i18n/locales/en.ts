@@ -83,6 +83,8 @@ export const en: Translation = {
     noPositionHint: 'The device has not reported a GNSS position yet.',
     trailFromAlert: 'Trail since alert',
     trailFromTrip: 'Trip trail',
+    thirdPartyNotice:
+      'Map and addresses via OpenStreetMap. Opening Google Maps or Waze sends the coordinates to a third party.',
   },
   events: {
     kindSuspectedMovement: 'Suspected movement',

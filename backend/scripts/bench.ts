@@ -31,6 +31,7 @@
 import { PrismaService } from '../src/prisma/prisma.service';
 import { DevicesService } from '../src/devices/devices.service';
 import { sign, deriveKey } from '../src/devices/protocol';
+import { encryptSecret, decryptSecret } from '../src/devices/secret-crypto';
 
 const BASE = process.env.BENCH_BASE ?? 'http://localhost:3000';
 
@@ -52,15 +53,17 @@ async function main() {
       let device = await prisma.device.findFirst({ where: { ownerId: user.id } });
       if (!device) {
         const { randomBytes } = await import('crypto');
+        // Mismo cifrado en reposo que el alta de la app: se guarda cifrado
+        // (con GUARDIAN_SECRET_KEY) y se imprime el claro una sola vez.
         device = await prisma.device.create({
-          data: { name: arg ?? 'Vehiculo', secret: randomBytes(32).toString('hex'), ownerId: user.id },
+          data: { name: arg ?? 'Vehiculo', secret: encryptSecret(randomBytes(32).toString('hex')), ownerId: user.id },
         });
         console.log('Dispositivo creado.');
       } else {
         console.log('Ya existia un dispositivo; reutilizo.');
       }
       console.log(`  deviceId: ${device.id}`);
-      console.log(`  secret:   ${device.secret}`);
+      console.log(`  secret:   ${decryptSecret(device.secret)}`);
       return;
     }
 
@@ -102,7 +105,7 @@ async function main() {
       }
       const body = Buffer.from(JSON.stringify(envelope), 'utf8');
       // Canal de eventos: siempre K_event (derivada por contexto).
-      const signature = sign(body, deriveKey(device.secret, device.id, 'event'));
+      const signature = sign(body, deriveKey(decryptSecret(device.secret), device.id, 'event'));
       const res = await fetch(`${BASE}/v1/events`, {
         method: 'POST',
         headers: {
@@ -135,7 +138,7 @@ async function main() {
         'utf8',
       );
       // Canal de comandos: K_command, nunca K_event.
-      const signature = sign(body, deriveKey(device.secret, device.id, 'command'));
+      const signature = sign(body, deriveKey(decryptSecret(device.secret), device.id, 'command'));
       const res = await fetch(`${BASE}/v1/commands/poll`, {
         method: 'POST',
         headers: {
@@ -172,7 +175,7 @@ async function main() {
           position: { lat: Number(lat.toFixed(6)), lon: Number(lon.toFixed(6)), fixAtUtc: now },
         };
         const body = Buffer.from(JSON.stringify(envelope), 'utf8');
-        const signature = sign(body, deriveKey(device.secret, device.id, 'event'));
+        const signature = sign(body, deriveKey(decryptSecret(device.secret), device.id, 'event'));
         const res = await fetch(`${BASE}/v1/events`, {
           method: 'POST',
           headers: {
