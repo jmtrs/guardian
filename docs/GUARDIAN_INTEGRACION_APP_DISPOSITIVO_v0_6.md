@@ -61,8 +61,8 @@ El banco Python continúa siendo útil como implementación de referencia y simu
 ### Huecos encontrados que v0.6 debe resolver
 
 > Estado a septiembre de 2026: los huecos 2, 7, 9 y 10 están resueltos (PR1 + PR2); los
-> huecos 4, 5 y 11 están resueltos y el 6 mitigado (PR3, endurecimiento de despliegue y
-> privacidad); el resto siguen abiertos. El contrato vigente entre placa, backend y app
+> huecos 4, 5, 6 y 11 están resueltos (PR3 + PR3b, endurecimiento de despliegue y
+> privacidad, con retención de historial); el resto siguen abiertos. El contrato vigente entre placa, backend y app
 > es `docs/CONTRATO_DISPOSITIVO_v0_6.md`. Visión de las cinco capas y recorrido de un dato
 > de punta a punta: `docs/MAPA_CONEXION_SISTEMA.md`.
 
@@ -81,8 +81,8 @@ El banco Python continúa siendo útil como implementación de referencia y simu
 5. ~~**CORS estaba abierto con `app.enableCors()`.**~~ **Resuelto (PR3).**  
    Origen restringido a `trustedOrigins()` (`src/config/origins.ts`), fuente única compartida con Better Auth. Producción solo admite `guardian://` y lo declarado en `TRUSTED_ORIGINS`; el bloque local es solo desarrollo. Los endpoints del dispositivo no llevan Origin (firmware), así que CORS no los afecta: la firma HMAC sigue siendo su autoridad.
 
-6. **La ubicación exacta sale a terceros.** *(Mitigado en PR3.)*  
-   El reverse-geocode ya no sale desde cada móvil: pasa por el proxy del backend (hueco 11), un único punto que cachea y limita. Pendiente: Google Maps/Waze siguen recibiendo las coordenadas cuando el usuario pulsa sus botones — falta el aviso explícito de terceros en la app (PR3b).
+6. ~~**La ubicación exacta sale a terceros.**~~ **Resuelto (PR3 + PR3b).**  
+   El reverse-geocode ya no sale desde cada móvil: pasa por el proxy del backend (hueco 11), un único punto que cachea y limita. La app muestra un aviso explícito de terceros en el mapa: mapa/direcciones vía OpenStreetMap y, al abrir Google Maps/Waze, se envían las coordenadas a un tercero. Retención de historial añadida (PR3b): los eventos con ubicación se purgan tras `RETENTION_DAYS` (90 por defecto); los incidentes no caducan.
 
 7. ~~**La alerta actual no tiene estado propio.**~~ **Resuelto (PR1).**  
    Incidente persistente (`OPEN` → `ACKNOWLEDGED` → `CLOSED`) independiente del último evento. `power_lost` abre incidente propio; un `heartbeat` posterior no lo oculta. Ningún incidente `OPEN` se cierra por telemetría; un `power_lost` revisado se cierra al observar energía de vehiculo restablecida (`closedByEventSeq`).
