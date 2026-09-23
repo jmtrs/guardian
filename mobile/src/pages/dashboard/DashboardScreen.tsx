@@ -71,6 +71,13 @@ function ClaimDeviceForm({
   const [code, setCode] = useState('');
   const theme = useUITheme();
   const claim = useClaimDevice();
+  // El guion del formato XXXX-XXXX lo inserta el input, no el usuario: sin
+  // esto es facil teclear mal o creer que el guion hay que ponerlo a mano.
+  // (El backend normaliza igual; esto es solo UX.)
+  const formatCode = (raw: string) => {
+    const clean = raw.toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 8);
+    return clean.length > 4 ? `${clean.slice(0, 4)}-${clean.slice(4)}` : clean;
+  };
   const submit = () => {
     const trimmed = code.trim();
     if (trimmed.length > 0 && !claim.isPending) {
@@ -87,7 +94,7 @@ function ClaimDeviceForm({
       <TextInput
         style={styles.claimInput}
         value={code}
-        onChangeText={setCode}
+        onChangeText={(v) => setCode(formatCode(v))}
         placeholder={t('home.claimPlaceholder')}
         placeholderTextColor={theme.semantic.fg.muted}
         autoCapitalize="characters"
