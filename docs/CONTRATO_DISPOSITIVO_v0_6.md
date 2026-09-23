@@ -262,20 +262,29 @@ APP            BACKEND                    PLACA
 - El firmware valida `type` e `id` del comando antes de actuar; algo que no
   entiende se ignora (fail-closed) y se reporta al siguiente heartbeat si procede.
 
-## 7. Provisioning (estado actual, banco)
+## 7. Provisioning y claim (presencia física en software)
 
-Hoy el alta es operada por banco (no hay pairing en producción aún):
+El alta separa **aprovisionar** (banco/fábrica, sin dueño) de **reclamar** (el
+dueño, con presencia). La placa nace sin `ownerId`, en una ventana de pairing
+corta, con un **código de claim de un solo uso** (en BD solo su hash SHA-256):
 
 ```bash
 cd backend
-npx ts-node scripts/bench.ts provision <email-del-dueño> [nombre]
-# imprime deviceId + secret (K_root en hex) — UNA sola vez
+npx ts-node scripts/bench.ts provision [nombre]
+# imprime deviceId + secret (K_root en hex) + claimCode — UNA sola vez
 ```
 
-- Requiere que el usuario haya iniciado sesión en la app al menos una vez.
-- El `deviceId` + `K_root` se graban en la flash/NVS de la placa.
-- Flujo de pairing con presencia física (claim + credenciales de un solo uso):
-  pendiente, ver `GUARDIAN_INTEGRACION_APP_DISPOSITIVO_v0_6.md` §6.
+- El `deviceId` + `K_root` se graban en la flash/NVS de la placa; el `claimCode`
+  se entrega con el dispositivo (pegatina/pantalla).
+- El dueño lo reclama desde la app (`POST /v1/devices/claim { code }`) o, en
+  banco, con `npx ts-node scripts/bench.ts claim <email> <code>`. Al reclamar se
+  liga `ownerId`, se sella `claimedAt` y el código **se quema** (hash y ventana a
+  null): de un solo uso. Fuera de la ventana o código ya usado → rechazo
+  uniforme (no enumera). El dueño debe haber iniciado sesión en la app.
+- Esto es la **presencia física en software** (ventana + código un-solo-uso). El
+  reto BLE criptográfico real queda diferido a firmware, ver
+  `GUARDIAN_INTEGRACION_APP_DISPOSITIVO_v0_6.md` §6: cuando exista, sustituirá al
+  código sin cambiar el resto del contrato.
 
 Herramientas de banco contra un backend en marcha:
 

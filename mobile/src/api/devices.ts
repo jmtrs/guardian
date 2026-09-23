@@ -16,7 +16,8 @@ export type PowerTelemetry = {
 export type Device = {
   id: string;
   name: string;
-  ownerId: string;
+  // Null solo antes del claim; los devices que llegan a la app ya tienen dueño.
+  ownerId: string | null;
   state: DeviceState;
   tripState: TripState;
   workshopUntil: string | null;
@@ -226,6 +227,20 @@ export function useRequestLocate(deviceId: string | undefined) {
         queryClient.invalidateQueries({ queryKey: deviceKeys.all });
       }
     },
+  });
+}
+
+// Reclamar un dispositivo con su codigo de claim (presencia fisica en
+// software). Exito -> invalida la lista para que el device recien ligado
+// aparezca. El backend rechaza codigo invalido/caducado/ya usado (404 uniforme).
+export function useClaimDevice() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (code: string) => {
+      const response = await apiClient.post<Device>('/v1/devices/claim', { code });
+      return response.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: deviceKeys.all }),
   });
 }
 

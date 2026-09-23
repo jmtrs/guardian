@@ -41,7 +41,8 @@ async function main() {
   const user = await prisma.user.create({
     data: { id: randomUUID(), name: 'drive', email: `${randomUUID()}@drive.test` },
   });
-  const { device, secret } = await svc.createDevice(user.id, 'drive-veh');
+  const { secret, claimCode } = await svc.createDevice('drive-veh');
+  const device = await svc.claimDevice(claimCode, user.id); // presencia -> dueño
   const id = device.id;
   const post = (seq: number, kind: string, source: 'vehicle' | 'reserve' = 'vehicle') => {
     const body = envelope(id, seq, kind, source);

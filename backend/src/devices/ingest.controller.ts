@@ -17,11 +17,14 @@ import type { AuthenticatedRequest } from '../auth/auth.guard';
 import { BetterAuthGuard } from '../auth/auth.guard';
 import { DevicesService } from './devices.service';
 
-export class CreateDeviceDto {
+// Reclamar un dispositivo aprovisionado: el dueño teclea su codigo de claim.
+// El alta (createDevice) es operacion de banco/fabrica, no un endpoint HTTP:
+// un dispositivo nace sin dueño y solo se liga por claim (docs contrato §7).
+export class ClaimDeviceDto {
   @IsString()
   @IsNotEmpty()
-  @MaxLength(64)
-  name!: string;
+  @MaxLength(32)
+  code!: string;
 }
 
 /**
@@ -59,9 +62,9 @@ export class IngestController {
 export class DevicesController {
   constructor(private readonly devices: DevicesService) {}
 
-  @Post()
-  async create(@Req() req: AuthenticatedRequest, @Body() body: CreateDeviceDto) {
-    return this.devices.createDevice(req.user!.id, body.name);
+  @Post('claim')
+  async claim(@Req() req: AuthenticatedRequest, @Body() body: ClaimDeviceDto) {
+    return this.devices.claimDevice(body.code, req.user!.id);
   }
 
   @Get()

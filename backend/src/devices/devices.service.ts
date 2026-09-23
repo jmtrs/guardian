@@ -26,6 +26,7 @@ import {
   TRIP_RESOLVING_KINDS,
 } from './incident';
 import { encryptSecret, decryptSecret } from './secret-crypto';
+import { generateClaimCode, hashClaimCode } from './claim-code';
 
 export type IngestResult = {
   status: 202;
@@ -56,6 +57,10 @@ const DEVICE_PUBLIC_FIELDS = {
 // firmware), un comando que nadie recoge debe morir pronto y en silencio.
 const LOCATE_TTL_MS = 120_000;
 
+// Ventana de pairing: el codigo de claim solo vale este tiempo tras aprovisionar.
+// Presencia fisica en software (el reto BLE va en firmware). Override por env.
+const PAIRING_WINDOW_MS = (Number(process.env.PAIRING_WINDOW_MIN) || 15) * 60_000;
+
 // Raiz señuelo para deviceIds desconocidos: verificar contra ella nunca pasa,
 // pero iguala el coste HKDF+HMAC del camino valido (anti enumeracion por
 // tiempo de respuesta, no solo por mensaje de error).
@@ -73,16 +78,56 @@ export type DevicePosition = {
 export class DevicesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async createDevice(ownerId: string, name: string) {
+  /**
+   * Aprovisiona un dispositivo SIN dueño (banco/fabrica). Nace en ventana de
+   * pairing con un codigo de un solo uso; el dueño lo reclama luego con claim.
+   * Devuelve, una sola vez: el secreto en claro (K_root) y el codigo de claim.
+   * En la BD solo queda el secreto cifrado y el HASH del codigo.
+   */
+  async createDevice(name: string) {
     const secret = randomBytes(32).toString('hex');
+    const claimCode = generateClaimCode();
     const device = await this.prisma.device.create({
-      // Cifrado en reposo: en la BD nunca queda el K_root en claro (con master
-      // key configurada). El secreto en claro solo se devuelve aqui, una vez.
-      data: { name, secret: encryptSecret(secret), ownerId },
+      data: {
+        name,
+        secret: encryptSecret(secret),
+        claimCodeHash: hashClaimCode(claimCode),
+        pairingExpiresAt: new Date(Date.now() + PAIRING_WINDOW_MS),
+      },
       select: DEVICE_PUBLIC_FIELDS,
     });
-    // El secreto viaja una sola vez, en la creacion.
-    return { device, secret };
+    // Secreto y codigo viajan una sola vez, en el aprovisionamiento.
+    return { device, secret, claimCode };
+  }
+
+  /**
+   * Reclama un dispositivo con su codigo de claim: liga el dueño si el codigo
+   * cuadra, sigue sin dueño y la ventana sigue viva. Atomico y guardado por
+   * estado (id + ownerId null + ventana): dos claims concurrentes -> uno gana,
+   * el otro cuenta 0. El codigo se quema (hash y ventana a null). Mensaje de
+   * error uniforme: no distingue "no existe" de "caducado" ni enumera codigos.
+   */
+  async claimDevice(code: string, userId: string) {
+    const hash = hashClaimCode(code);
+    const target = await this.prisma.device.findFirst({
+      where: { claimCodeHash: hash, ownerId: null, pairingExpiresAt: { gt: new Date() } },
+      select: { id: true },
+    });
+    if (!target) {
+      throw new NotFoundException('Invalid or expired claim code');
+    }
+    const advanced = await this.prisma.device.updateMany({
+      where: { id: target.id, ownerId: null, pairingExpiresAt: { gt: new Date() } },
+      data: { ownerId: userId, claimedAt: new Date(), claimCodeHash: null, pairingExpiresAt: null },
+    });
+    if (advanced.count === 0) {
+      // Otro claim gano la carrera entre el read y el update.
+      throw new NotFoundException('Invalid or expired claim code');
+    }
+    return this.prisma.device.findUniqueOrThrow({
+      where: { id: target.id },
+      select: DEVICE_PUBLIC_FIELDS,
+    });
   }
 
   listDevices(ownerId: string) {

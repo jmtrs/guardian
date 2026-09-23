@@ -35,6 +35,28 @@ export function createStyles(theme: UITheme) {
     cardSlot: {
       marginBottom: tokens.spacing['5'],
     },
+    // Alta por codigo de claim (sin dispositivo): input + boton + error.
+    claimForm: {
+      gap: tokens.spacing['3'],
+    },
+    claimInput: {
+      borderWidth: 1,
+      borderColor: semantic.border.metal,
+      backgroundColor: semantic.bg.inset,
+      color: semantic.fg.primary,
+      fontFamily: fontFamily.ui.medium,
+      fontSize: 18,
+      letterSpacing: 4,
+      textAlign: 'center',
+      paddingVertical: tokens.spacing['3'],
+      paddingHorizontal: tokens.spacing['4'],
+    },
+    claimError: {
+      color: semantic.accent.warning,
+      fontFamily: fontFamily.ui.regular,
+      fontSize: 13,
+      textAlign: 'center',
+    },
     // Fila de identidad: wordmark + acciones. Sin header bar.
     wordmarkRow: {
       flexDirection: 'row',
