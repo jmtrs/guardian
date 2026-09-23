@@ -286,6 +286,19 @@ La recuperación por móvil perdido debe requerir un procedimiento deliberado de
 
 Las credenciales locales se guardan en SecureStore en el móvil. En el firmware se evaluarán Secure Boot y Flash Encryption del ESP32 antes de considerar resistente el secreto ante acceso físico al dispositivo.
 
+### Desvinculación y transferencia (diseño cerrado, sin implementar)
+
+El dispositivo pertenece a la **cuenta**, no al teléfono: entrar con el mismo email en otro móvil ya muestra el dispositivo, sin desvincular nada. La desvinculación solo tiene sentido al **cambiar de dueño** (venta o traspaso). Diseño mínimo y cerrado:
+
+- **`POST /v1/devices/:id/release`**, sesión del dueño actual + **step-up OTP** (acción destructiva; no basta una sesión robada). Atómico.
+- Efecto: `ownerId → null`, `claimCode` nuevo con ventana de pairing nueva. El dispositivo vuelve al estado "sin dueño" y el comprador reclama igual que uno nuevo (QR o código). Sin estados intermedios ni tokens de transferencia.
+- **Purga de historial del dispositivo** (eventos, viajes, ubicaciones) en el release: el vendedor no debe ver dónde va el comprador. La purga es total, no configurable — menos modos, menos fallos.
+- Con firmware: el release es la señal para rotar credenciales en el siguiente re-pairing (nueva `S_pair` ⇒ nueva `K_ble`; R7 ya lo exige). Nunca una API que entregue claves existentes.
+- Sin firmware (hoy): el canal HMAC (`K_root`) puede sobrevivir al release; el corte real de acceso del dueño antiguo es `ownerId null` + purga. Suficiente mientras el único provisioning sea de banco.
+- Sin bloqueos permanentes ni contadores de por vida: el límite del claim (fuerza bruta del código) ya existe y vale igual para el nuevo dueño.
+
+No se implementa aún. Cuando se haga: endpoint + botón en Ajustes de la app con confirmación, nada más.
+
 ### Primer movimiento del propietario
 
 Un ESP32 en deep sleep no mantiene BLE activo. Por eso la app puede preparar una intención local y esperar a que el LIS3DH despierte Guardian al abrir/entrar/mover ligeramente el vehiculo. Tras despertar, Guardian abre una ventana BLE corta para completar el desafío.
