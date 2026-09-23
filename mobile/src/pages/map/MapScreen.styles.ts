@@ -129,6 +129,14 @@ export function createStyles(theme: UITheme) {
       gap: tokens.spacing['3'],
       marginTop: tokens.spacing['3'],
     },
+    // Aviso de terceros: discreto pero legible, bajo los botones de navegacion.
+    infoNotice: {
+      color: semantic.fg.muted,
+      fontFamily: fontFamily.ui.regular,
+      fontSize: 11,
+      lineHeight: 15,
+      marginTop: tokens.spacing['3'],
+    },
     navButton: {
       flex: 1,
     },

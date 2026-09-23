@@ -168,6 +168,9 @@ export function MapScreen() {
             labelStyle={styles.navButtonLabel}
           />
         </View>
+        {/* Aviso de terceros: el mapa/geocode usan OpenStreetMap; al abrir un
+            navegador externo se le envian las coordenadas. Privacidad explicita. */}
+        <Text style={styles.infoNotice}>{t('map.thirdPartyNotice')}</Text>
       </View>
       </View>
     </ScreenFrame>

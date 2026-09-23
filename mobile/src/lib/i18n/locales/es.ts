@@ -79,6 +79,8 @@ export const es = {
     addressUnknown: 'Direccion desconocida',
     trailFromAlert: 'Rastro desde la alerta',
     trailFromTrip: 'Rastro del viaje',
+    thirdPartyNotice:
+      'Mapa y direcciones vía OpenStreetMap. Al abrir Google Maps o Waze envías las coordenadas a un tercero.',
     noPositionTitle: 'Sin posicion',
     noPositionHint: 'El dispositivo aun no ha reportado una posicion GNSS.',
   },
