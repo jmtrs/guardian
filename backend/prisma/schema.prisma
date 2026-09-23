@@ -73,6 +73,20 @@ model Verification {
   @@map("verifications")
 }
 
+// Bloqueo persistente por email para el bypass OTP temporal. Es independiente
+// del OTP de Better Auth: pedir o reenviar un codigo nunca borra los fallos.
+model OtpLoginLockout {
+  email           String    @id
+  generation      String
+  failedAttempts  Int       @default(0)
+  pendingAttempts Int       @default(0)
+  windowStartedAt DateTime
+  lockedUntil     DateTime?
+  updatedAt       DateTime  @updatedAt
+
+  @@map("otp_login_lockouts")
+}
+
 // ============ Dominio Guardian ============
 
 enum DeviceState {

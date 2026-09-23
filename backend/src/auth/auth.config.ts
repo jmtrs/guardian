@@ -5,6 +5,7 @@ import { expo } from '@better-auth/expo';
 import type { PrismaClient } from '@prisma/client';
 
 import { trustedOrigins } from '../config/origins';
+import { withTemporaryOtpLockout } from './otp-login-lockout';
 import { readTemporaryLoginOtp } from './temporary-login-otp';
 
 /**
@@ -31,7 +32,7 @@ export function createAuth(prisma: PrismaClient, baseUrl: string, secret: string
   const temporaryLoginOtp =
     process.env.NODE_ENV === 'production' ? readTemporaryLoginOtp() : undefined;
 
-  return betterAuth({
+  const auth = betterAuth({
     database: prismaAdapter(prisma, {
       provider: 'postgresql',
     }),
@@ -110,4 +111,14 @@ export function createAuth(prisma: PrismaClient, baseUrl: string, secret: string
       }),
     ],
   }) as unknown as Auth;
+
+  if (!temporaryLoginOtp) {
+    return auth;
+  }
+
+  return {
+    handler: (request) =>
+      withTemporaryOtpLockout(prisma, temporaryLoginOtp.email, request, auth.handler),
+    api: auth.api,
+  };
 }

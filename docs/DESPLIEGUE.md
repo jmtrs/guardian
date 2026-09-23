@@ -23,7 +23,7 @@ conexión a la BD.
 | `TRUSTED_ORIGINS` | reco | Orígenes extra CORS (coma). En prod solo `guardian://` + esto |
 | `RESEND_API_KEY` | login | OTP de login por email (Resend). **Sin ella el login falla cerrado**; el canal de la placa (HMAC) no la necesita |
 | `EMAIL_FROM` | no | Remitente del OTP (`Guardian <onboarding@resend.dev>`) |
-| `TEMP_LOGIN_OTP_EMAIL` + `TEMP_LOGIN_OTP_CODE` | no | Bypass temporal: código fijo de 6 cifras solo para el email exacto y solo para login. Deben definirse juntas; el resto sigue exigiendo Resend |
+| `TEMP_LOGIN_OTP_EMAIL` + `TEMP_LOGIN_OTP_CODE` | no | Bypass temporal: código fijo de 6 cifras solo para el email exacto y solo para login. Deben definirse juntas; 5 códigos incorrectos en 15 min bloquean ese email durante 15 min en PostgreSQL, entre todas las IPs. El resto sigue exigiendo Resend |
 | `RETENTION_DAYS` | no | Retención de eventos (def. 90) |
 | `PAIRING_WINDOW_MIN` | no | Ventana del código de claim (def. 15) |
 | `NODE_ENV` | sí | `production` |
