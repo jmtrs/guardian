@@ -32,7 +32,7 @@ conexión a la BD.
 El despliegue concreto —compose, secretos y exposición por el conector
 Cloudflare— vive en la **base local del homelab** (`homelab/services/guardian/`),
 no en este repo. Se expone por el conector existente `jmtrs-homeserver` como
-`guardian.aggc.dev`, sin abrir puertos — lo que la placa necesita por LTE
+`gtapi.aggc.dev`, sin abrir puertos — lo que la placa necesita por LTE
 (contrato §3: TLS válido de extremo a extremo). Los secretos NO se versionan.
 
 ## Notas de contrato
