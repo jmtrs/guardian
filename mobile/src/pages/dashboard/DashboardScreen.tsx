@@ -77,6 +77,11 @@ function ClaimDeviceForm({
       claim.mutate(trimmed, { onSuccess: () => setCode('') });
     }
   };
+  // 429 (rate-limit tras varios intentos) tiene mensaje propio; el resto es el
+  // caso comun: codigo invalido o caducado (mensaje localizado).
+  const isRateLimited =
+    (claim.error as { response?: { status?: number } } | null)?.response?.status === 429;
+  const errorText = isRateLimited ? t('errors.RATE_LIMIT_EXCEEDED') : t('home.claimError');
   return (
     <View style={styles.claimForm}>
       <TextInput
@@ -97,7 +102,7 @@ function ClaimDeviceForm({
         onPress={submit}
         disabled={claim.isPending || code.trim().length === 0}
       />
-      {claim.isError ? <Text style={styles.claimError}>{t('home.claimError')}</Text> : null}
+      {claim.isError ? <Text style={styles.claimError}>{errorText}</Text> : null}
     </View>
   );
 }
