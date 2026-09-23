@@ -118,13 +118,16 @@ el contrato y `mobile/src/api/devices.ts` mandan.
 | Pieza | Sitio |
 |---|---|
 | Contrato de eventos (decode + firma + HKDF) | `backend/src/devices/protocol.ts` |
-| Lógica de negocio (anti-replay, ACK, incidentes) | `backend/src/devices/devices.service.ts` |
+| Lógica de negocio (anti-replay, ACK, incidentes, claim) | `backend/src/devices/devices.service.ts` |
 | Reglas puras de incidentes | `backend/src/devices/incident.ts` |
 | Endpoints dispositivo y dueño | `backend/src/devices/ingest.controller.ts` |
+| Cifrado del secreto en reposo + código de claim | `backend/src/devices/secret-crypto.ts`, `claim-code.ts` |
+| Seguridad de despliegue (CORS, rate-limit) | `backend/src/config/origins.ts`, `app.module.ts` (ThrottlerModule) |
+| Privacidad (geocode proxy, retención) | `backend/src/geocode/`, `backend/src/devices/retention.service.ts` |
 | Esquema BD | `backend/prisma/schema.prisma` |
-| Tests del contrato | `backend/src/devices/protocol.spec.ts`, `incident.spec.ts` |
-| Drives end-to-end | `backend/scripts/drive-pr1.ts`, `drive-pr2.ts` |
-| Simulador / banco manual | `backend/scripts/bench.ts`, `guardian/` (Python) |
+| Tests del contrato | `backend/src/devices/*.spec.ts` (protocol, incident, claim-code, secret-crypto), `config/origins.spec.ts`, `geocode/geocode.service.spec.ts` |
+| Drives end-to-end | `backend/scripts/drive-pr1.ts`, `drive-pr2.ts`, `drive-pr4.ts` |
+| Simulador de dispositivo v2 (ref firmware) + banco | `guardian/` (Python), `backend/scripts/bench.ts` |
 | Espejo de tipos + hooks de datos (app) | `mobile/src/api/devices.ts` |
 | Dashboard, mapa, incidentes (app) | `mobile/src/pages/` |
 | Hardware y energía | `docs/COMPONENTES.md`, `docs/hardware/` |
