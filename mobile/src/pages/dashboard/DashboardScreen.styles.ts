@@ -91,6 +91,26 @@ export function createStyles(theme: UITheme) {
       textShadowColor: semantic.glow.text,
       textShadowRadius: 6,
     },
+    // Boton de estado de sistemas: mismo recuadro metal que el engranaje, a su
+    // izquierda. El punto interior indica el agregado (ambar OK / rojo fallo).
+    systemsButton: {
+      width: 30,
+      height: 30,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: semantic.border.metal,
+      backgroundColor: cardBg,
+    },
+    systemsDot: {
+      color: semantic.fg.primary,
+      fontSize: 12,
+      textShadowColor: semantic.glow.text,
+      textShadowRadius: 6,
+    },
+    systemsDotAlert: {
+      color: semantic.accent.red,
+    },
     logout: {
       color: semantic.fg.muted,
       fontFamily: fontFamily.ui.regular,

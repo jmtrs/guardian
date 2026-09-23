@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import ReorderableList, {
   reorderItems,
@@ -20,13 +20,16 @@ import {
   useRequestLocate,
   useStartTrip,
 } from '@/api/devices';
+import { useServerHealth } from '@/api/health';
 import { LaneStripe } from '@/ui/assets/placeholders';
 import { AlertPulse } from '@/ui/composites/AlertPulse';
 import { EmptyState } from '@/ui/composites/EmptyState';
 import { HUDButton } from '@/ui/composites/HUDButton';
+import { InfoSheet, type InfoSheetHandle, type InfoSheetItem } from '@/ui/composites/InfoSheet';
 import { ScreenFrame } from '@/ui/composites/ScreenFrame';
 import { ScreenLoader } from '@/ui/composites/ScreenLoader';
 import { useDashboardOrder, type DashboardCard } from '@/lib/dashboard-order';
+import { deviceOnline, formatSince } from '@/lib/device-health';
 import {
   formatCountdown,
   formatEventTime,
@@ -132,6 +135,48 @@ export function DashboardScreen() {
   const acknowledge = useAcknowledgeIncident(device?.id);
   const locate = useRequestLocate(device?.id);
 
+  // ---- Estado de sistemas (panel InfoSheet en la cabecera) ----
+  // Servidor: poll a /health (independiente del dispositivo). Dispositivo:
+  // online/offline derivado de lastSeenAt, sin protocolo nuevo. GPS/modem/
+  // acelerometro quedan fuera hasta el self-test del contrato v3.
+  const systemsSheet = useRef<InfoSheetHandle>(null);
+  const { data: health } = useServerHealth({ refetchInterval: 15_000 });
+  // undefined = aun sin primera respuesta (no marcar rojo por eso).
+  const serverOk = health?.ok;
+  const onlineState = deviceOnline(device?.lastSeenAt);
+  const systemsAlert = serverOk === false || onlineState !== 'online';
+
+  const systemsItems = useMemo<InfoSheetItem[]>(() => {
+    const serverText =
+      serverOk === undefined
+        ? t('common.loading')
+        : serverOk
+          ? t('systems.serverOk')
+          : t('systems.serverDown');
+    const since = onlineState === 'never' ? null : formatSince(device?.lastSeenAt);
+    const deviceStateText =
+      onlineState === 'online'
+        ? t('systems.deviceOnline')
+        : onlineState === 'offline'
+          ? t('systems.deviceOffline')
+          : t('systems.deviceNever');
+    const deviceText = since
+      ? `${deviceStateText} · ${t('systems.since', { time: since })}`
+      : deviceStateText;
+    return [
+      {
+        glyph: '●',
+        tone: serverOk === undefined ? 'muted' : serverOk ? 'ok' : 'alert',
+        text: `${t('systems.server')} · ${serverText}`,
+      },
+      {
+        glyph: '●',
+        tone: onlineState === 'online' ? 'ok' : onlineState === 'never' ? 'muted' : 'alert',
+        text: `${t('systems.device')} · ${deviceText}`,
+      },
+    ];
+  }, [serverOk, onlineState, device?.lastSeenAt, t]);
+
   // Energia: lo que alimenta AHORA — si la fuente es la reserva, el voltaje
   // util es el de la reserva. Reserva sin lectura: '—', nunca el rail del
   // vehiculo (mostrar 13.6V miente si la de ~4V esta alimentando).
@@ -206,19 +251,38 @@ export function DashboardScreen() {
       : geo?.label || t('map.addressUnknown');
 
   const wordmark = (
-    <View style={styles.wordmarkRow}>
-      <Text style={styles.wordmark}>{t('home.title')}</Text>
-      <View style={styles.actions}>
-        <Pressable
-          onPress={() => router.push('/(home)/settings')}
-          hitSlop={12}
-          accessibilityLabel={t('home.settings')}
-          style={({ pressed }) => [styles.gearButton, pressed && styles.pressed]}
-        >
-          <Text style={styles.gearIcon}>⚙</Text>
-        </Pressable>
+    <>
+      <View style={styles.wordmarkRow}>
+        <Text style={styles.wordmark}>{t('home.title')}</Text>
+        <View style={styles.actions}>
+          {/* Estado de sistemas: pegado al engranaje, a su izquierda. Punto
+              ambar (OK) / rojo (fallo). Abre el InfoSheet con el detalle. */}
+          <Pressable
+            onPress={() => systemsSheet.current?.present()}
+            hitSlop={12}
+            accessibilityLabel={t('systems.label')}
+            style={({ pressed }) => [styles.systemsButton, pressed && styles.pressed]}
+          >
+            <Text style={[styles.systemsDot, systemsAlert && styles.systemsDotAlert]}>●</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => router.push('/(home)/settings')}
+            hitSlop={12}
+            accessibilityLabel={t('home.settings')}
+            style={({ pressed }) => [styles.gearButton, pressed && styles.pressed]}
+          >
+            <Text style={styles.gearIcon}>⚙</Text>
+          </Pressable>
+        </View>
       </View>
-    </View>
+      <InfoSheet
+        ref={systemsSheet}
+        glyph="◉"
+        title={t('systems.title')}
+        closeLabel={t('systems.close')}
+        items={systemsItems}
+      />
+    </>
   );
 
   // Recuadros memoizados: referencia estable entre renders → al reordenar la

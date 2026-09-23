@@ -96,6 +96,19 @@ export const en: Translation = {
     privacyNav:
       'The Gmaps and Waze buttons open that app with the vehicle coordinates. From that moment the data lives on their servers, not yours.',
   },
+  systems: {
+    title: 'System status',
+    close: 'Got it',
+    label: 'System status',
+    server: 'Server',
+    serverOk: 'Operational',
+    serverDown: 'No connection',
+    device: 'Device',
+    deviceOnline: 'Online',
+    deviceOffline: 'No signal',
+    deviceNever: 'Never seen',
+    since: '{{time}} ago',
+  },
   events: {
     kindSuspectedMovement: 'Suspected movement',
     kindBatteryLow: 'Low battery',

@@ -16,8 +16,23 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HUDButton } from '@/ui/composites/HUDButton';
 import { Reveal } from '@/ui/composites/Reveal';
 import { ScreenGrid } from '@/ui/composites/ScreenGrid';
-import { useUITheme, withAlpha } from '@/ui/theme';
+import { useUITheme, withAlpha, type UITheme } from '@/ui/theme';
 import { createInfoSheetStyles } from './InfoSheet.styles';
+
+// Color del glifo por tono. Estetica HUD ambar: no hay verde; 'ok' usa el fg
+// primario (brillante) y 'alert' el rojo de peligro. Sin tono: acento ambar.
+function toneColor(tone: InfoSheetTone | undefined, semantic: UITheme['semantic']) {
+  switch (tone) {
+    case 'ok':
+      return { color: semantic.fg.primary };
+    case 'alert':
+      return { color: semantic.accent.red };
+    case 'muted':
+      return { color: semantic.fg.muted };
+    default:
+      return { color: semantic.accent.warning };
+  }
+}
 
 const SHEET_OFFSCREEN_Y = 640;
 const CLOSE_DISTANCE = 96;
@@ -25,10 +40,15 @@ const CLOSE_VELOCITY = 700;
 const OPEN_SPRING = { damping: 22, stiffness: 240, mass: 0.8 } as const;
 const RETURN_SPRING = { damping: 24, stiffness: 280, mass: 0.75 } as const;
 
+/** Color del glifo de la fila. Sin tone: acento ambar por defecto (avisos).
+ * 'ok'/'alert'/'muted' dan semantica de estado (p.ej. panel de sistemas). */
+export type InfoSheetTone = 'ok' | 'alert' | 'muted';
+
 export type InfoSheetItem = {
   /** Glifo HUD a la izquierda de la fila (misma familia que eventos/estados). */
   glyph: string;
   text: string;
+  tone?: InfoSheetTone;
 };
 
 export type InfoSheetHandle = {
@@ -188,7 +208,9 @@ export const InfoSheet = forwardRef<InfoSheetHandle, InfoSheetProps>(function In
                 {items.map((item, i) => (
                   <Reveal key={item.text} delay={90 * (i + 1)} distance={12}>
                     <View style={styles.row}>
-                      <Text style={styles.rowGlyph}>{item.glyph}</Text>
+                      <Text style={[styles.rowGlyph, toneColor(item.tone, semantic)]}>
+                        {item.glyph}
+                      </Text>
                       <Text style={styles.rowText}>{item.text}</Text>
                     </View>
                   </Reveal>
