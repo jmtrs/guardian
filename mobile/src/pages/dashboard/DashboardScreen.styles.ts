@@ -313,8 +313,12 @@ export function createStyles(theme: UITheme) {
       backgroundColor: cardBg,
       overflow: 'hidden',
     },
-    // Cabecera dentro del panel de eventos.
+    // Cabecera dentro del panel de eventos: titulo + enlace a historial en la
+    // misma linea (antes el enlace vivia al pie y duplicaba altura).
     panelHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
       paddingHorizontal: tokens.spacing['4'],
       paddingVertical: tokens.spacing['3'],
       borderBottomWidth: 1,
@@ -373,14 +377,13 @@ export function createStyles(theme: UITheme) {
       fontFamily: fontFamily.ui.regular,
       fontSize: 12,
     },
-    // Fila-enlace "ver historial" al pie del panel.
-    eventsLinkRow: {
-      alignItems: 'flex-end',
-      paddingHorizontal: tokens.spacing['4'],
-      paddingVertical: tokens.spacing['3'],
-      borderTopWidth: 1,
-      borderTopColor: semantic.border.subtle,
-      backgroundColor: semantic.bg.inset,
+    // Zona táctil del enlace de la cabecera (margen negativo para que el
+    // dedo no tenga que apuntar solo al texto).
+    headerLink: {
+      marginVertical: -tokens.spacing['2'],
+      marginHorizontal: -tokens.spacing['2'],
+      paddingVertical: tokens.spacing['2'],
+      paddingHorizontal: tokens.spacing['2'],
     },
     sectionLink: {
       color: semantic.accent.warning,

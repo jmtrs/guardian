@@ -278,6 +278,12 @@ export function DashboardScreen() {
         <View style={styles.recentPanel}>
           <View style={styles.panelHeader}>
             <Text style={styles.panelHeaderText}>{t('home.events')}</Text>
+            <Pressable
+              style={({ pressed }) => [styles.headerLink, pressed && styles.pressed]}
+              onPress={() => router.push('/(home)/events')}
+            >
+              <Text style={styles.sectionLink}>{t('home.eventsTitle')} →</Text>
+            </Pressable>
           </View>
           {recentEvents.length > 0 ? (
             recentEvents.map((event, i) => (
@@ -303,12 +309,6 @@ export function DashboardScreen() {
               <Text style={styles.emptyEventsText}>{t('home.noEvents')}</Text>
             </View>
           )}
-          <Pressable
-            style={({ pressed }) => [styles.eventsLinkRow, pressed && styles.pressed]}
-            onPress={() => router.push('/(home)/events')}
-          >
-            <Text style={styles.sectionLink}>{t('home.eventsTitle')} →</Text>
-          </Pressable>
         </View>
       ),
       status: (
