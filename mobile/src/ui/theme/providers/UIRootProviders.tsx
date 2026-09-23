@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { I18nextProvider } from 'react-i18next';
 
 import { UIThemeProvider } from './UIThemeProvider';
+import { ScreenAmbient } from '@/ui/composites/ScreenAmbient';
 import { ScreenGrid } from '@/ui/composites/ScreenGrid';
 import { useUIFonts } from '@/ui/theme/fonts';
 import i18n from '@/lib/i18n';
@@ -28,6 +29,7 @@ export function UIRootProviders({ children, waitUntilFontsLoaded = false }: UIRo
           <UIThemeProvider>
             <View style={{ flex: 1 }}>
               {children}
+              <ScreenAmbient />
               <ScreenGrid />
             </View>
           </UIThemeProvider>
