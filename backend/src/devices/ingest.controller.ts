@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 
 import type { AuthenticatedRequest } from '../auth/auth.guard';
 import { BetterAuthGuard } from '../auth/auth.guard';
@@ -32,6 +33,9 @@ export class ClaimDeviceDto {
  * los bytes exactos, asi que leemos req.rawBody — ver rawBody en main.ts).
  * Endpoint de ingesta de eventos del dispositivo.
  */
+// Canal del dispositivo: la firma HMAC es su autoridad, no el rate-limit. No se
+// estrangula para no descartar jamas una alerta legitima (movimiento/corte).
+@SkipThrottle()
 @Controller()
 export class IngestController {
   constructor(private readonly devices: DevicesService) {}
@@ -62,6 +66,8 @@ export class IngestController {
 export class DevicesController {
   constructor(private readonly devices: DevicesService) {}
 
+  // Limite estricto: el claim es la superficie de fuerza bruta del codigo.
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
   @Post('claim')
   async claim(@Req() req: AuthenticatedRequest, @Body() body: ClaimDeviceDto) {
     return this.devices.claimDevice(body.code, req.user!.id);
@@ -132,6 +138,7 @@ export class DevicesController {
 
 // Canal dispositivo: poll de comandos pendientes. Misma autenticacion HMAC
 // que /v1/events pero con K_command (contexto propio, nunca K_event).
+@SkipThrottle()
 @Controller()
 export class DeviceCommandsController {
   constructor(private readonly devices: DevicesService) {}
