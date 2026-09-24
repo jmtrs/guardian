@@ -3,9 +3,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Orden de los recuadros del dashboard, reordenable por el usuario (long-press).
 // Persistido en AsyncStorage (mismo idiom que el store de tema).
-export type DashboardCard = 'location' | 'events' | 'status';
+export type DashboardCard = 'location' | 'events' | 'status' | 'battery';
 
-export const DEFAULT_ORDER: DashboardCard[] = ['location', 'events', 'status'];
+export const DEFAULT_ORDER: DashboardCard[] = ['location', 'events', 'status', 'battery'];
 
 const STORAGE_KEY = 'guardian.dashboardOrder';
 

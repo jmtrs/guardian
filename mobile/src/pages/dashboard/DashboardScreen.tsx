@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 
 import {
   useAcknowledgeIncident,
+  useBatteryHistory,
   useClaimDevice,
   useDeviceCommands,
   useDeviceEvents,
@@ -23,12 +24,14 @@ import {
 import { useServerHealth } from '@/api/health';
 import { LaneStripe } from '@/ui/assets/placeholders';
 import { AlertPulse } from '@/ui/composites/AlertPulse';
+import { Sparkline, VoltageGauge } from '@/ui/composites/BatteryChart';
 import { EmptyState } from '@/ui/composites/EmptyState';
 import { HUDButton } from '@/ui/composites/HUDButton';
 import { InfoSheet, type InfoSheetHandle, type InfoSheetItem } from '@/ui/composites/InfoSheet';
 import { ScreenFrame } from '@/ui/composites/ScreenFrame';
 import { ScreenLoader } from '@/ui/composites/ScreenLoader';
 import { useDashboardOrder, type DashboardCard } from '@/lib/dashboard-order';
+import { useEnergyPrefs } from '@/lib/prefs';
 import { deviceOnline, formatSince } from '@/lib/device-health';
 import {
   formatCountdown,
@@ -130,6 +133,12 @@ export function DashboardScreen() {
   const { data: events } = useDeviceEvents(device?.id, 5, { refetchInterval: 5_000 });
   const { data: incidents } = useIncidents(device?.id, { refetchInterval: 5_000 });
   const { data: commands } = useDeviceCommands(device?.id, { refetchInterval: 5_000 });
+  // Sparkline de energia para la card: misma granularidad que la elegida en la
+  // pagina de Energia (persistida), para que el vistazo case con lo que ve dentro.
+  const { energyBucket } = useEnergyPrefs();
+  const { data: batteryDay } = useBatteryHistory(device?.id, energyBucket, {
+    refetchInterval: 60_000,
+  });
   const startTrip = useStartTrip(device?.id);
   const endTrip = useEndTrip(device?.id);
   const acknowledge = useAcknowledgeIncident(device?.id);
@@ -184,16 +193,12 @@ export function DashboardScreen() {
     device?.lastPowerSource === 'reserve'
       ? (device?.lastReserveMv ?? null)
       : (device?.lastVehicleMv ?? null);
-  const powerSourceText =
-    device?.lastPowerSource === 'vehicle'
-      ? t('home.powerVehicle')
-      : device?.lastPowerSource === 'reserve'
-        ? t('home.powerReserve')
-        : null;
-  const batteryText =
-    effectiveMv != null
-      ? `${(effectiveMv / 1000).toFixed(2)} V${powerSourceText ? ` · ${powerSourceText}` : ''}`
-      : '—';
+  const batteryText = effectiveMv != null ? `${(effectiveMv / 1000).toFixed(2)} V` : '—';
+
+  // Tendencia para la sparkline de la card: se dibuja solo con >=5 buckets con
+  // dato (con menos no hay curva que valga la pena; se cae al gauge).
+  const batteryTrend = useMemo(() => batteryDay?.points ?? [], [batteryDay]);
+  const hasBatteryTrend = batteryTrend.filter((p) => p.samples > 0).length >= 5;
 
   // LOCATE_NOW: el estado se deriva del ULTIMO comando, no del mutacion local —
   // el ACK solo existe cuando el dispositivo manda el gnss_fix con commandId.
@@ -373,6 +378,18 @@ export function DashboardScreen() {
           )}
         </View>
       ),
+      battery: (
+        <View style={styles.recentPanel}>
+          <View style={styles.batteryCardRow}>
+            <Text style={styles.batteryCardValue}>{batteryText}</Text>
+            {hasBatteryTrend ? (
+              <Sparkline points={batteryTrend} />
+            ) : effectiveMv != null ? (
+              <VoltageGauge mv={effectiveMv} />
+            ) : null}
+          </View>
+        </View>
+      ),
       status: (
         <View
           style={[
@@ -431,10 +448,6 @@ export function DashboardScreen() {
                 {device.lastSeenAt ? formatEventTime(device.lastSeenAt) : t('home.lastSeenNever')}
               </Text>
             </View>
-            <View style={styles.metaRow}>
-              <Text style={styles.metaLabel}>{t('home.battery')}</Text>
-              <Text style={styles.metaValue}>{batteryText}</Text>
-            </View>
           </View>
         </View>
       ),
@@ -458,6 +471,9 @@ export function DashboardScreen() {
     acknowledge,
     statusText,
     batteryText,
+    effectiveMv,
+    batteryTrend,
+    hasBatteryTrend,
     locate,
     locateLabel,
     locateWaiting,
@@ -499,6 +515,8 @@ export function DashboardScreen() {
             ? { tripId: activeTripId }
             : undefined;
       router.push(params ? { pathname: '/(home)/map', params } : '/(home)/map');
+    } else if (key === 'battery') {
+      router.push('/(home)/battery');
     }
   };
 

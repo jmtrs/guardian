@@ -27,6 +27,13 @@ import {
 } from './incident';
 import { encryptSecret, decryptSecret } from './secret-crypto';
 import { generateClaimCode, hashClaimCode } from './claim-code';
+import { RetentionService } from './retention.service';
+import {
+  resolveBatteryQuery,
+  type BatteryHistoryDto,
+  type BatteryQueryInput,
+  type ResolvedBatteryQuery,
+} from './battery-history';
 
 export type IngestResult = {
   status: 202;
@@ -76,7 +83,10 @@ export type DevicePosition = {
 
 @Injectable()
 export class DevicesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly retention: RetentionService,
+  ) {}
 
   /**
    * Aprovisiona un dispositivo SIN dueño (banco/fabrica). Nace en ventana de
@@ -243,6 +253,102 @@ export class DevicesService {
       }
     }
     return positions.reverse();
+  }
+
+  /**
+   * Historial de energia agregado. La telemetria v2 (payload.power) ya se
+   * persiste cruda en cada evento; aqui se agrega en cubos hora/dia/semana sin
+   * exponer NADA del payload (ni posicion, ni seq): DTO estrecho, solo mV.
+   *
+   * $queryRaw parametrizado (Prisma no filtra bien dentro del JSON via ORM, ver
+   * listPositions). Puntos clave:
+   * - Predicado de rango SARGABLE sobre `observedAt` desnuda (columna = UTC naive)
+   *   -> range scan del indice [deviceId, observedAt]; sin el, el date_trunc del
+   *   ON escanearia todo el historial del device por request.
+   * - Bucketing con timezone: observedAt es naive UTC (sin @db.Timestamptz), se
+   *   reinterpreta como UTC y se convierte al tz del usuario; un "dia" = dia local
+   *   (DST correcto). El grid genera timestamptz AT TIME ZONE tz -> mismo dominio.
+   * - generate_series + LEFT JOIN -> serie continua: TODOS los buckets del rango,
+   *   vacios incluidos (offline = hueco, jamas interpolacion).
+   * - Guard `~ '^[0-9]+$'` sobre vehicleMv en el ON (fail-safe ante fila
+   *   malformada, no fail-crash). reserveMv es nullable por diseño -> guard inline
+   *   con CASE, para no descartar la muestra de vehicle cuando reserve falta/es basura.
+   */
+  async batteryHistory(
+    deviceId: string,
+    ownerId: string,
+    input: BatteryQueryInput,
+  ): Promise<BatteryHistoryDto> {
+    await this.requireOwnedDevice(deviceId, ownerId);
+
+    let q: ResolvedBatteryQuery;
+    try {
+      q = resolveBatteryQuery(input, new Date(), this.retention.retentionDays());
+    } catch (error) {
+      if (error instanceof ProtocolError) {
+        throw new BadRequestException(error.message);
+      }
+      throw error;
+    }
+
+    const fromIso = q.from.toISOString();
+    const toIso = q.to.toISOString();
+
+    interface RawRow {
+      bucket_start: Date;
+      vehicle_avg: Prisma.Decimal | null;
+      vehicle_min: number | null;
+      vehicle_max: number | null;
+      reserve_avg: Prisma.Decimal | null;
+      samples: number;
+    }
+
+    let rows: RawRow[];
+    try {
+      rows = await this.prisma.$queryRaw<RawRow[]>`
+        WITH grid AS (
+          SELECT gs AS bucket_start
+          FROM generate_series(
+            date_trunc(${q.trunc}::text, ${fromIso}::timestamptz AT TIME ZONE ${q.tz}),
+            ${toIso}::timestamptz AT TIME ZONE ${q.tz},
+            ${q.stepInterval}::interval) gs
+        )
+        SELECT g.bucket_start,
+               avg((e.payload->'power'->>'vehicleMv')::numeric) AS vehicle_avg,
+               min((e.payload->'power'->>'vehicleMv')::int)     AS vehicle_min,
+               max((e.payload->'power'->>'vehicleMv')::int)     AS vehicle_max,
+               avg(CASE WHEN e.payload->'power'->>'reserveMv' ~ '^[0-9]+$'
+                        THEN (e.payload->'power'->>'reserveMv')::numeric END) AS reserve_avg,
+               count(e.id)::int                                 AS samples
+        FROM grid g
+        LEFT JOIN device_events e
+          ON e."deviceId" = ${deviceId}
+         AND e."observedAt" >= (${fromIso}::timestamptz AT TIME ZONE 'UTC')
+         AND e."observedAt" <  (${toIso}::timestamptz AT TIME ZONE 'UTC')
+         AND date_trunc(${q.trunc}::text, (e."observedAt" AT TIME ZONE 'UTC') AT TIME ZONE ${q.tz}) = g.bucket_start
+         AND e.payload->'power'->>'vehicleMv' ~ '^[0-9]+$'
+        GROUP BY g.bucket_start
+        ORDER BY g.bucket_start ASC`;
+    } catch {
+      // tz invalida (u otro error de bind) -> 400, nunca 500.
+      throw new BadRequestException('Invalid battery history query');
+    }
+
+    return {
+      deviceId,
+      bucket: q.bucket,
+      tz: q.tz,
+      from: fromIso,
+      to: toIso,
+      points: rows.map((r) => ({
+        bucketStart: r.bucket_start.toISOString(),
+        vehicleMvAvg: r.vehicle_avg == null ? null : Math.round(Number(r.vehicle_avg)),
+        vehicleMvMin: r.vehicle_min,
+        vehicleMvMax: r.vehicle_max,
+        reserveMvAvg: r.reserve_avg == null ? null : Math.round(Number(r.reserve_avg)),
+        samples: r.samples,
+      })),
+    };
   }
 
   /**
