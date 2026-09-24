@@ -8,12 +8,12 @@
 #   backend/scripts/prod-sim.sh heartbeat        # latido (refresca lastSeen)
 #   backend/scripts/prod-sim.sh suspected_movement | power_lost | battery_low
 #
-# Config por entorno (defaults al homelab actual):
-#   SIM_HOST=REDACTED-HOMELAB-HOST   SIM_CONTAINER=guardian_backend
+# Config por entorno (obligatorios; el host/contenedor del homelab no se
+# commitea): SIM_HOST=<user@host> SIM_CONTAINER=<contenedor backend>
 set -euo pipefail
 
-HOST="${SIM_HOST:-REDACTED-HOMELAB-HOST}"
-CONTAINER="${SIM_CONTAINER:-guardian_backend}"
+HOST="${SIM_HOST:?SIM_HOST no definido (user@host del homelab)}"
+CONTAINER="${SIM_CONTAINER:?SIM_CONTAINER no definido (nombre del contenedor backend)}"
 KIND="${1:-gnss_fix}"
 COUNT="${2:-3}"
 
