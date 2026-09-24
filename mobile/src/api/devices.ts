@@ -99,12 +99,39 @@ export type Command = {
   resultEventId: string | null;
 };
 
+// ============ Historial de energia (v2) ============
+
+export type BatteryBucket = 'hour' | 'day' | 'week';
+
+/** Espejo de BatteryPoint del backend. null = sin lecturas validas en el bucket
+ * (offline = hueco, jamas interpolacion). */
+export type BatteryPoint = {
+  bucketStart: string;
+  vehicleMvAvg: number | null;
+  vehicleMvMin: number | null;
+  vehicleMvMax: number | null;
+  reserveMvAvg: number | null;
+  samples: number;
+};
+
+/** Espejo del DTO estrecho: solo agregados de bateria, nunca payload/position. */
+export type BatteryHistory = {
+  deviceId: string;
+  bucket: BatteryBucket;
+  tz: string;
+  from: string;
+  to: string;
+  points: BatteryPoint[];
+};
+
 export const deviceKeys = {
   all: ['devices'] as const,
   events: (deviceId: string) => ['devices', deviceId, 'events'] as const,
   positions: (deviceId: string) => ['devices', deviceId, 'positions'] as const,
   incidents: (deviceId: string) => ['devices', deviceId, 'incidents'] as const,
   commands: (deviceId: string) => ['devices', deviceId, 'commands'] as const,
+  battery: (deviceId: string, bucket: BatteryBucket) =>
+    ['devices', deviceId, 'battery', bucket] as const,
 };
 
 /** Acota el rastro de posiciones a un contexto: incidente (desde que abrio)
@@ -176,6 +203,36 @@ export function useDevicePositions(
         `/v1/devices/${deviceId}/positions`,
         { params: { limit, ...(scope?.incidentId && { incidentId: scope.incidentId }), ...(scope?.tripId && { tripId: scope.tripId }) } },
       );
+      return response.data;
+    },
+    enabled: Boolean(deviceId),
+    refetchInterval: options?.refetchInterval,
+  });
+}
+
+// Zona del dispositivo: para que Dia/Semana cuadren con el reloj del usuario
+// (el backend bucketea en esta tz). Fallback UTC si el runtime no la expone.
+function deviceTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
+}
+
+// Historial de energia agregado por bucket. Serie continua (buckets vacios con
+// samples:0). Mismo idiom que useDevicePositions.
+export function useBatteryHistory(
+  deviceId: string | undefined,
+  bucket: BatteryBucket,
+  options?: { refetchInterval?: number },
+) {
+  return useQuery({
+    queryKey: deviceKeys.battery(deviceId ?? 'none', bucket),
+    queryFn: async () => {
+      const response = await apiClient.get<BatteryHistory>(`/v1/devices/${deviceId}/battery`, {
+        params: { bucket, tz: deviceTimeZone() },
+      });
       return response.data;
     },
     enabled: Boolean(deviceId),

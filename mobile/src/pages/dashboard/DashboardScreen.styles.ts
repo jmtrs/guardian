@@ -33,7 +33,7 @@ export function createStyles(theme: UITheme) {
     },
     // Cada slot arrastrable: separacion entre recuadros.
     cardSlot: {
-      marginBottom: tokens.spacing['5'],
+      marginBottom: tokens.spacing['4'],
     },
     // Alta por codigo de claim (sin dispositivo): input + boton + error.
     claimForm: {
@@ -240,7 +240,8 @@ export function createStyles(theme: UITheme) {
       borderWidth: 1,
       borderColor: semantic.border.metal,
       backgroundColor: cardBg,
-      padding: tokens.spacing['5'],
+      paddingHorizontal: tokens.spacing['4'],
+      paddingVertical: tokens.spacing['3'],
       overflow: 'hidden',
     },
     mapGlyphBox: {
@@ -260,7 +261,7 @@ export function createStyles(theme: UITheme) {
     },
     mapBody: {
       flex: 1,
-      gap: tokens.spacing['2'],
+      gap: tokens.spacing['1'],
     },
     // Sin label: la direccion es el titular de la tarjeta (hasta 2 lineas).
     mapValue: {
@@ -283,7 +284,7 @@ export function createStyles(theme: UITheme) {
     // boton pide un LOCATE_NOW real — es una accion, quiere aire y tap area.
     // El fix va horneado en el label ("UBICADO 18:03"), sin linea aparte.
     mapFooter: {
-      marginTop: tokens.spacing['2'],
+      marginTop: tokens.spacing['1'],
     },
     locateRow: {
       alignSelf: 'flex-start',
@@ -351,6 +352,19 @@ export function createStyles(theme: UITheme) {
       fontSize: 11,
       letterSpacing: 3,
       textTransform: 'uppercase',
+    },
+    // Fila de la card de energia: voltaje actual + sparkline de tendencia.
+    batteryCardRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: tokens.spacing['4'],
+      paddingHorizontal: tokens.spacing['4'],
+      paddingVertical: tokens.spacing['4'],
+    },
+    batteryCardValue: {
+      color: semantic.fg.primary,
+      fontFamily: fontFamily.ui.medium,
+      fontSize: 16,
     },
     eventRow: {
       flexDirection: 'row',

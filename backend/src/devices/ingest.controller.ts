@@ -110,6 +110,21 @@ export class DevicesController {
     });
   }
 
+  // Historial de energia agregado (v2). Parseo de bucket/from/to/tz lo hace el
+  // helper del service; el controller solo pasa strings. DTO estrecho: solo
+  // agregados de bateria, jamas payload/position/seq.
+  @Get(':id/battery')
+  battery(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Query('bucket') bucket?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('tz') tz?: string,
+  ) {
+    return this.devices.batteryHistory(id, req.user!.id, { bucket, from, to, tz });
+  }
+
   @Get(':id/incidents')
   incidents(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.devices.listIncidents(id, req.user!.id);

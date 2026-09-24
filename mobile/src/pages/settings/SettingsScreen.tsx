@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
 import { authClient } from '@/api/auth-client';
+import { useEnergyView, type EnergyView } from '@/lib/prefs';
 import { ScreenFrame } from '@/ui/composites/ScreenFrame';
 import { accentFromHue, hueOfHex, THEME_PRESETS, useThemeControls, useUITheme } from '@/ui/theme';
 
@@ -15,12 +16,18 @@ const LANGUAGES = [
   { id: 'es', label: 'ES' },
 ];
 
+const ENERGY_VIEWS: { id: EnergyView; labelKey: string }[] = [
+  { id: 'line', labelKey: 'battery.viewLine' },
+  { id: 'list', labelKey: 'battery.viewList' },
+];
+
 export function SettingsScreen() {
   const { t, i18n } = useTranslation();
   const theme = useUITheme();
   const router = useRouter();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const controls = useThemeControls();
+  const { energyView, setEnergyView } = useEnergyView();
 
   const isCustom = controls.settings.presetId === 'custom';
   const hue = hueOfHex(controls.activeAccent);
@@ -127,6 +134,34 @@ export function SettingsScreen() {
                   >
                     <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>
                       {lang.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+
+        {/* ENERGY */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>{t('settings.energy')}</Text>
+          <View style={styles.panel}>
+            <Text style={styles.fieldHint}>{t('settings.energyHint')}</Text>
+            <View style={styles.chipRow}>
+              {ENERGY_VIEWS.map((v) => {
+                const active = energyView === v.id;
+                return (
+                  <Pressable
+                    key={v.id}
+                    onPress={() => setEnergyView(v.id)}
+                    style={({ pressed }) => [
+                      styles.chip,
+                      active && styles.chipActive,
+                      pressed && styles.chipPressed,
+                    ]}
+                  >
+                    <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>
+                      {t(v.labelKey)}
                     </Text>
                   </Pressable>
                 );
