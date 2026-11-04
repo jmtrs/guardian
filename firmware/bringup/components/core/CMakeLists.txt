@@ -5,3 +5,6 @@ idf_component_register(
          "src/bringup.c" "src/bringup_modem.c" "src/bringup_motion.c"
     INCLUDE_DIRS "include"
 )
+
+# Our code builds warning-free; keep it that way.
+target_compile_options(${COMPONENT_LIB} PRIVATE -Wall -Wextra -Werror)

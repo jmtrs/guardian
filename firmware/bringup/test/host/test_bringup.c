@@ -38,6 +38,49 @@ static void passthrough_sends_line_verbatim(void)
     CHECK_STR(fakes.last_raw, "AT+CSQ");
 }
 
+static void passthrough_power_down_invalidates_state(void)
+{
+    fakes_reset();
+    gd_bringup_t s = fakes_service();
+    gd_bringup_handle_line(&s, "AT+CPOF");
+    CHECK(!s.modem_powered);
+    gd_bringup_handle_line(&s, "!modem on");
+    CHECK_EQ(fakes.power_on_calls, 2);
+}
+
+static void watch_aborts_after_repeated_ack_failures(void)
+{
+    fakes_reset();
+    fakes.trigger_polls_left = 1;
+    fakes.acknowledge_result = GD_ERR_IO;
+    gd_bringup_t s = fakes_service();
+    CHECK_EQ(gd_bringup_watch_motion(&s, 80), 0);
+    CHECK_EQ(fakes.acknowledge_calls, 3);
+    CHECK(fakes_reported("latch not cleared: i/o error"));
+    CHECK(fakes_reported("watch aborted"));
+}
+
+static void sleep_refuses_when_modem_pins_not_held(void)
+{
+    fakes_reset();
+    fakes.hold_result = GD_ERR_IO;
+    gd_bringup_t s = fakes_service();
+    CHECK_EQ(gd_bringup_sleep_until_motion(&s, 80), GD_ERR_IO);
+    CHECK_EQ(fakes.deep_sleep_calls, 0);
+    CHECK(fakes_reported("modem pins not held"));
+}
+
+static void sleep_refuses_when_latch_cannot_be_cleared(void)
+{
+    fakes_reset();
+    fakes.trigger_polls_left = 1;
+    fakes.acknowledge_result = GD_ERR_IO;
+    gd_bringup_t s = fakes_service();
+    CHECK_EQ(gd_bringup_sleep_until_motion(&s, 80), GD_ERR_STATE);
+    CHECK_EQ(fakes.deep_sleep_calls, 0);
+    CHECK(fakes_reported("cannot clear motion latch: i/o error"));
+}
+
 static void modem_off_always_runs_and_clears_state(void)
 {
     fakes_reset();
@@ -151,7 +194,11 @@ void test_bringup(void)
     RUN(identify_powers_modem_once_and_runs_queries);
     RUN(identify_stops_when_modem_does_not_power_on);
     RUN(passthrough_sends_line_verbatim);
+    RUN(passthrough_power_down_invalidates_state);
     RUN(modem_off_always_runs_and_clears_state);
+    RUN(watch_aborts_after_repeated_ack_failures);
+    RUN(sleep_refuses_when_modem_pins_not_held);
+    RUN(sleep_refuses_when_latch_cannot_be_cleared);
     RUN(selftest_passes_at_rest);
     RUN(selftest_fails_when_not_at_rest);
     RUN(selftest_reports_missing_sensor);

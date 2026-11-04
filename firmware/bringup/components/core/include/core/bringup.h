@@ -73,7 +73,8 @@ gd_status_t gd_bringup_sensor_selftest(gd_bringup_t *self);
 /**
  * @brief Step 4a: arm the motion interrupt and count triggers while awake.
  * @param threshold_mg Threshold, already clamped.
- * @return Number of interrupts observed in GD_WATCH_DURATION_MS.
+ * @return Number of interrupts observed in GD_WATCH_DURATION_MS. Also 0 if the
+ *         sensor could not be probed or armed; the reason is reported.
  */
 uint32_t gd_bringup_watch_motion(gd_bringup_t *self, uint16_t threshold_mg);
 

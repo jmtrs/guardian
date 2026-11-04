@@ -10,7 +10,7 @@ fakes_t fakes;
 
 static gd_status_t modem_power_on(void *ctx) { (void)ctx; fakes.power_on_calls++; return fakes.power_on_result; }
 static void modem_power_off(void *ctx) { (void)ctx; fakes.power_off_calls++; }
-static void modem_hold(void *ctx) { (void)ctx; fakes.hold_calls++; }
+static gd_status_t modem_hold(void *ctx) { (void)ctx; fakes.hold_calls++; return fakes.hold_result; }
 static void modem_send_raw(void *ctx, const char *line) { (void)ctx; fakes.last_raw = line; }
 
 static gd_status_t modem_command(void *ctx, const char *cmd, uint32_t timeout_ms)
@@ -45,12 +45,14 @@ static bool motion_triggered(void *ctx)
     return fakes.trigger_polls_left > 0;
 }
 
-static uint8_t motion_ack(void *ctx)
+static gd_status_t motion_ack(void *ctx, uint8_t *source)
 {
     (void)ctx;
     fakes.acknowledge_calls++;
+    *source = 0x4A;
+    if (fakes.acknowledge_result != GD_OK) return fakes.acknowledge_result;
     if (fakes.trigger_polls_left > 0) fakes.trigger_polls_left--;
-    return 0x4A;
+    return GD_OK;
 }
 
 static void platform_delay(void *ctx, uint32_t ms) { (void)ctx; fakes.slept_ms += ms; }
@@ -86,6 +88,8 @@ void fakes_reset(void)
     fakes.power_on_result = GD_OK;
     fakes.command_result = GD_OK;
     fakes.probe_result = GD_OK;
+    fakes.acknowledge_result = GD_OK;
+    fakes.hold_result = GD_OK;
     fakes.sample = (gd_accel_mg_t){.x = 10, .y = -20, .z = 1003};
     fakes.wake = GD_WAKE_POWER_ON;
     fakes.battery = 4100;

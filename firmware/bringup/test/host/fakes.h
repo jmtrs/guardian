@@ -20,6 +20,7 @@ typedef struct {
     int power_on_calls;
     int power_off_calls;
     int hold_calls;
+    gd_status_t hold_result;
     const char *commands[FAKE_MAX_CALLS];
     int command_count;
     const char *last_raw;
@@ -31,6 +32,7 @@ typedef struct {
     int trigger_polls_left; /**< is_triggered returns true while > 0 ... */
     bool stuck_high;        /**< ... or always, if set. */
     int acknowledge_calls;
+    gd_status_t acknowledge_result; /**< Failing ack leaves the latch set. */
     /* platform */
     gd_wake_cause_t wake;
     int32_t battery;

@@ -32,6 +32,10 @@ typedef struct {
     /** Current level of the interrupt line (true = motion latched). */
     bool (*is_triggered)(void *ctx);
 
-    /** Clear the latch. @return Raw interrupt source, for diagnostics. */
-    uint8_t (*acknowledge)(void *ctx);
+    /**
+     * Clear the latch.
+     * @param source Receives the raw interrupt source register, for diagnostics.
+     * @return GD_OK if the latch was read (and therefore cleared).
+     */
+    gd_status_t (*acknowledge)(void *ctx, uint8_t *source);
 } gd_motion_sensor_port_t;

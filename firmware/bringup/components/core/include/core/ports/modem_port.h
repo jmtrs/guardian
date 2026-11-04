@@ -31,6 +31,10 @@ typedef struct {
     /** Send a raw line (CRLF appended) without waiting for a result. */
     void (*send_raw)(void *ctx, const char *line);
 
-    /** Latch the "modem off" pin levels so they survive deep sleep. */
-    void (*hold_off_during_sleep)(void *ctx);
+    /**
+     * Latch the "modem off" pin levels so they survive deep sleep.
+     * @return GD_OK only if every modem line is held; sleeping otherwise would
+     *         measure P1 with lines in an unknown state.
+     */
+    gd_status_t (*hold_off_during_sleep)(void *ctx);
 } gd_modem_port_t;

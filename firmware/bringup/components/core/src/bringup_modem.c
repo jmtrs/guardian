@@ -82,4 +82,5 @@ void gd_bringup_passthrough(gd_bringup_t *self, const char *line)
 {
     if (gd_bringup_modem_on(self) != GD_OK) return;
     self->modem->send_raw(self->modem->ctx, line);
+    if (gd_at_powers_down(line)) self->modem_powered = false;
 }

@@ -85,6 +85,15 @@ static void rejects_malformed_input(void)
     CHECK_STR(c.text, "reboot");
 }
 
+static void detects_power_down_commands(void)
+{
+    CHECK(gd_at_powers_down("AT+CPOF"));
+    CHECK(gd_at_powers_down("  at+cpowd=1"));
+    CHECK(!gd_at_powers_down("AT+CPIN?"));
+    CHECK(!gd_at_powers_down("AT+CPO"));
+    CHECK(!gd_at_powers_down(""));
+}
+
 void test_domain(void)
 {
     RUN(magnitude_is_euclidean_floor);
@@ -95,4 +104,5 @@ void test_domain(void)
     RUN(parses_simple_commands);
     RUN(parses_threshold_with_default_and_clamp);
     RUN(rejects_malformed_input);
+    RUN(detects_power_down_commands);
 }

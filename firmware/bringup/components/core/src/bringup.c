@@ -39,7 +39,10 @@ static void report_wake_source(gd_bringup_t *self)
         gd_report(self->report, "accelerometer not answering after wake\n");
         return;
     }
-    gd_report(self->report, "interrupt source 0x%02x\n", self->motion->acknowledge(self->motion->ctx));
+    uint8_t source = 0;
+    const gd_status_t status = self->motion->acknowledge(self->motion->ctx, &source);
+    if (status == GD_OK) gd_report(self->report, "interrupt source 0x%02x\n", source);
+    else gd_report(self->report, "could not clear wake latch: %s\n", gd_status_name(status));
 }
 
 void gd_bringup_announce(gd_bringup_t *self)

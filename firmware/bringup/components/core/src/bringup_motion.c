@@ -6,6 +6,8 @@
 
 /** Settling time after acknowledging a latch before re-checking the line. */
 #define RELATCH_CHECK_MS 50u
+/** Consecutive failed acknowledges after which the watch gives up (I2C fault). */
+#define MAX_ACK_FAILURES 3u
 
 /** Probe the sensor and report its identity. */
 static gd_status_t probe(gd_bringup_t *self)
@@ -63,10 +65,21 @@ uint32_t gd_bringup_watch_motion(gd_bringup_t *self, uint16_t threshold_mg)
     gd_report(self->report, "move the sensor (%u s)...\n", GD_WATCH_DURATION_MS / 1000u);
 
     uint32_t hits = 0;
+    uint32_t ack_failures = 0;
     for (uint32_t t = 0; t < GD_WATCH_DURATION_MS; t += GD_WATCH_POLL_MS) {
         if (self->motion->is_triggered(self->motion->ctx)) {
-            const uint8_t source = self->motion->acknowledge(self->motion->ctx);
-            gd_report(self->report, "motion #%lu, source 0x%02x\n", (unsigned long)++hits, source);
+            uint8_t source = 0;
+            const gd_status_t status = self->motion->acknowledge(self->motion->ctx, &source);
+            if (status != GD_OK) {
+                gd_report(self->report, "latch not cleared: %s\n", gd_status_name(status));
+                if (++ack_failures >= MAX_ACK_FAILURES) {
+                    gd_report(self->report, "watch aborted: sensor not answering\n");
+                    return hits;
+                }
+            } else {
+                ack_failures = 0;
+                gd_report(self->report, "motion #%lu, source 0x%02x\n", (unsigned long)++hits, source);
+            }
         }
         self->platform->delay_ms(self->platform->ctx, GD_WATCH_POLL_MS);
     }
@@ -74,13 +87,20 @@ uint32_t gd_bringup_watch_motion(gd_bringup_t *self, uint16_t threshold_mg)
     return hits;
 }
 
-/** Acknowledge any pending latch; true if the line is low afterwards. */
+/** Acknowledge any pending latch and confirm the line is low; reports the cause if not. */
 static bool interrupt_line_clear(gd_bringup_t *self)
 {
     if (!self->motion->is_triggered(self->motion->ctx)) return true;
-    self->motion->acknowledge(self->motion->ctx);
+    uint8_t source = 0;
+    const gd_status_t status = self->motion->acknowledge(self->motion->ctx, &source);
+    if (status != GD_OK) {
+        gd_report(self->report, "cannot clear motion latch: %s\n", gd_status_name(status));
+        return false;
+    }
     self->platform->delay_ms(self->platform->ctx, RELATCH_CHECK_MS);
-    return !self->motion->is_triggered(self->motion->ctx);
+    if (!self->motion->is_triggered(self->motion->ctx)) return true;
+    gd_report(self->report, "interrupt line stuck high\n");
+    return false;
 }
 
 gd_status_t gd_bringup_sleep_until_motion(gd_bringup_t *self, uint16_t threshold_mg)
@@ -91,10 +111,14 @@ gd_status_t gd_bringup_sleep_until_motion(gd_bringup_t *self, uint16_t threshold
     status = arm(self, threshold_mg);
     if (status != GD_OK) return status;
     if (!interrupt_line_clear(self)) {
-        gd_report(self->report, "interrupt line stuck high: refusing to sleep (would wake at once)\n");
+        gd_report(self->report, "refusing to sleep: it would wake at once\n");
         return GD_ERR_STATE;
     }
-    self->modem->hold_off_during_sleep(self->modem->ctx);
+    status = self->modem->hold_off_during_sleep(self->modem->ctx);
+    if (status != GD_OK) {
+        gd_report(self->report, "refusing to sleep: modem pins not held (%s)\n", gd_status_name(status));
+        return status;
+    }
     gd_report(self->report, "P1: deep sleep, modem off. Measure current now; move sensor to wake.\n");
     self->platform->deep_sleep_until_motion(self->platform->ctx);
     return GD_OK; /* only reached by host fakes */

@@ -105,6 +105,21 @@ static gd_command_t parse_local(const char *word)
     return make(GD_CMD_UNKNOWN, word);
 }
 
+/** Case-insensitive prefix match. */
+static bool starts_with_ci(const char *text, const char *prefix)
+{
+    for (; *prefix; text++, prefix++) {
+        if (toupper((unsigned char)*text) != *prefix) return false;
+    }
+    return true;
+}
+
+bool gd_at_powers_down(const char *line)
+{
+    const char *p = skip_spaces(line);
+    return starts_with_ci(p, "AT+CPOF") || starts_with_ci(p, "AT+CPOWD");
+}
+
 gd_command_t gd_command_parse(const char *line)
 {
     const char *start = skip_spaces(line);

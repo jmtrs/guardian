@@ -7,6 +7,7 @@
  */
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 
 /** Kind of command recognised on a console line. */
@@ -40,3 +41,11 @@ typedef struct {
  * @return Parsed command; never fails, unrecognised input maps to UNKNOWN.
  */
 gd_command_t gd_command_parse(const char *line);
+
+/**
+ * @brief Whether an AT line switches the modem off (AT+CPOF, AT+CPOWD...).
+ *
+ * Lets the service keep its power state truthful when the operator powers the
+ * modem down through passthrough. Case-insensitive, leading spaces ignored.
+ */
+bool gd_at_powers_down(const char *line);
