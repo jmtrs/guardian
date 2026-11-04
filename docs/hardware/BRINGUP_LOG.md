@@ -98,7 +98,10 @@ Conectado: módulo LIS3DH azul con tiras soldadas, 7 cables dupont según
 | Self-test en reposo | 10/10, \|a\| = 1021–1030 mg, ruido ±5 mg | **PASS**. Desviación del +2,5 %, dentro de la tolerancia del cero-g y la sensibilidad |
 | Primera muestra | ~750 mg con 20 ms de espera | El modo HR tarda 7/ODR en arrancar. Espera subida a 100 ms |
 
-Pasos de COMPONENTES.md: **3 (LIS3DH I²C) ✅**.
+| `!arm` 80 mg, 30 s | 15 interrupciones con toques cada 2 s, cada una limpiada | INT1 → IO34 llega. Fuentes `0x56`–`0x6a`: bit IA más los ejes |
+
+Pasos de COMPONENTES.md: **3 (LIS3DH I²C) ✅** y **4a (interrupción despierto) ✅**.
+Sin pull-down en INT1 no hubo falsos disparos: la salida push-pull fija el nivel.
 
 Lección: los cables dupont baratos fallan por dentro sin que se note. Antes de
 sospechar del chip, mirar los niveles de las líneas al arrancar.
