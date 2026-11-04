@@ -1,0 +1,174 @@
+//! In-memory fakes of every core port, sharing one scriptable [`World`].
+
+use std::cell::RefCell;
+use std::fmt;
+use std::rc::Rc;
+use std::time::Duration;
+
+use guardian_core::accel::{Accel, Threshold};
+use guardian_core::bringup::Bringup;
+use guardian_core::ports::{Identity, Modem, MotionSensor, Platform, SensorInfo, WakeCause};
+use guardian_core::Error;
+
+/// Scriptable state behind all fakes.
+pub struct World {
+    pub power_on_result: Result<(), Error>,
+    pub command_result: Result<(), Error>,
+    pub power_on_calls: u32,
+    pub power_off_calls: u32,
+    pub hold_result: Result<(), Error>,
+    pub hold_calls: u32,
+    pub commands: Vec<String>,
+    pub raw: Vec<String>,
+    pub probe_result: Result<SensorInfo, Error>,
+    pub sample: Accel,
+    pub armed: Option<Threshold>,
+    pub arm_calls: u32,
+    /// `is_triggered` is true while this is > 0 (each good ack decrements) ...
+    pub pending_triggers: u32,
+    /// ... or always, if set.
+    pub stuck_high: bool,
+    pub ack_result: Result<u8, Error>,
+    pub ack_calls: u32,
+    pub wake: WakeCause,
+    pub battery: Option<u32>,
+    pub slept: Duration,
+    pub deep_sleeps: u32,
+    pub out: String,
+}
+
+impl Default for World {
+    /// Everything succeeds; sensor at rest on Z; no motion.
+    fn default() -> Self {
+        Self {
+            power_on_result: Ok(()),
+            command_result: Ok(()),
+            power_on_calls: 0,
+            power_off_calls: 0,
+            hold_result: Ok(()),
+            hold_calls: 0,
+            commands: Vec::new(),
+            raw: Vec::new(),
+            probe_result: Ok(SensorInfo {
+                address: 0x18,
+                chip_id: 0x33,
+            }),
+            sample: Accel::new(10, -20, 1003),
+            armed: None,
+            arm_calls: 0,
+            pending_triggers: 0,
+            stuck_high: false,
+            ack_result: Ok(0x4A),
+            ack_calls: 0,
+            wake: WakeCause::PowerOn,
+            battery: Some(4100),
+            slept: Duration::ZERO,
+            deep_sleeps: 0,
+            out: String::new(),
+        }
+    }
+}
+
+/// Handle to the shared world; one clone per port.
+#[derive(Clone, Default)]
+pub struct Fake(pub Rc<RefCell<World>>);
+
+impl Fake {
+    pub fn with(configure: impl FnOnce(&mut World)) -> Self {
+        let fake = Self::default();
+        configure(&mut fake.0.borrow_mut());
+        fake
+    }
+
+    pub fn service(&self) -> Bringup<Fake, Fake, Fake, Fake> {
+        Bringup::new(self.clone(), self.clone(), self.clone(), self.clone())
+    }
+
+    pub fn world(&self) -> std::cell::Ref<'_, World> {
+        self.0.borrow()
+    }
+
+    pub fn printed(&self, needle: &str) -> bool {
+        self.world().out.contains(needle)
+    }
+}
+
+impl Modem for Fake {
+    fn power_on(&mut self) -> Result<(), Error> {
+        let mut w = self.0.borrow_mut();
+        w.power_on_calls += 1;
+        w.power_on_result
+    }
+    fn power_off(&mut self) {
+        self.0.borrow_mut().power_off_calls += 1;
+    }
+    fn command(&mut self, cmd: &str, _timeout: Duration) -> Result<(), Error> {
+        let mut w = self.0.borrow_mut();
+        w.commands.push(cmd.to_owned());
+        w.command_result
+    }
+    fn send_raw(&mut self, line: &str) {
+        self.0.borrow_mut().raw.push(line.to_owned());
+    }
+    fn hold_off_during_sleep(&mut self) -> Result<(), Error> {
+        let mut w = self.0.borrow_mut();
+        w.hold_calls += 1;
+        w.hold_result
+    }
+}
+
+impl MotionSensor for Fake {
+    fn probe(&mut self) -> Result<SensorInfo, Error> {
+        self.0.borrow().probe_result
+    }
+    fn read(&mut self) -> Result<Accel, Error> {
+        Ok(self.0.borrow().sample)
+    }
+    fn arm(&mut self, threshold: Threshold) -> Result<(), Error> {
+        let mut w = self.0.borrow_mut();
+        w.arm_calls += 1;
+        w.armed = Some(threshold);
+        Ok(())
+    }
+    fn is_triggered(&mut self) -> bool {
+        let w = self.0.borrow();
+        w.stuck_high || w.pending_triggers > 0
+    }
+    fn acknowledge(&mut self) -> Result<u8, Error> {
+        let mut w = self.0.borrow_mut();
+        w.ack_calls += 1;
+        if w.ack_result.is_ok() {
+            w.pending_triggers = w.pending_triggers.saturating_sub(1);
+        }
+        w.ack_result
+    }
+}
+
+impl Platform for Fake {
+    fn delay(&mut self, duration: Duration) {
+        self.0.borrow_mut().slept += duration;
+    }
+    fn identity(&mut self) -> Identity {
+        Identity {
+            chip_revision: 301,
+            cores: 2,
+            ..Identity::default()
+        }
+    }
+    fn battery_mv(&mut self) -> Option<u32> {
+        self.0.borrow().battery
+    }
+    fn wake_cause(&mut self) -> WakeCause {
+        self.0.borrow().wake
+    }
+    fn deep_sleep_until_motion(&mut self) {
+        self.0.borrow_mut().deep_sleeps += 1;
+    }
+}
+
+impl fmt::Write for Fake {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        self.0.borrow_mut().out.push_str(s);
+        Ok(())
+    }
+}

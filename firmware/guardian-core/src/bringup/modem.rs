@@ -1,0 +1,109 @@
+//! Use cases driving the modem: identity, network, power, GNSS, passthrough.
+
+use core::fmt::Write;
+use core::time::Duration;
+
+use super::{say, Bringup, Mac};
+use crate::command::at_powers_down;
+use crate::error::Result;
+use crate::ports::{Modem, MotionSensor, Platform};
+
+/// Timeout for identification and network queries.
+const QUERY_TIMEOUT: Duration = Duration::from_secs(5);
+/// GNSS power-up answers slowly on the A7670 family.
+const GNSS_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Queries identifying the modem and its network state. Echo goes off first so
+/// responses are not interleaved with the command text.
+const IDENTIFY_QUERIES: [&str; 11] = [
+    "ATE0",         // echo off
+    "ATI",          // manufacturer, model, revision
+    "AT+SIMCOMATI", // SIMCom extended identity (firmware build)
+    "AT+CGMR",      // firmware revision
+    "AT+CPIN?",     // SIM ready / PIN required
+    "AT+CICCID",    // SIM ICCID
+    "AT+CSQ",       // signal quality
+    "AT+CREG?",     // circuit-switched registration
+    "AT+CEREG?",    // LTE (EPS) registration
+    "AT+COPS?",     // operator
+    "AT+CPSI?",     // serving cell, band, RAT
+];
+
+impl<M: Modem, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
+    /// Power the modem on (no-op if already on).
+    ///
+    /// # Errors
+    /// Propagates the power-on failure, after reporting it.
+    pub fn modem_on(&mut self) -> Result<()> {
+        if self.modem_powered {
+            return Ok(());
+        }
+        let result = self.modem.power_on();
+        self.modem_powered = result.is_ok();
+        if let Err(e) = result {
+            say!(self, "modem power-on failed: {e}");
+        }
+        result
+    }
+
+    /// Power the modem off. Always runs: the cached state may be stale after a reset.
+    pub fn modem_off(&mut self) {
+        self.modem.power_off();
+        self.modem_powered = false;
+    }
+
+    /// Steps 1–2: board identity, modem identity, SIM and network registration.
+    pub fn identify(&mut self) {
+        let id = self.platform.identity();
+        say!(
+            self,
+            "chip: rev v{}.{}, {} cores, flash {} KB, psram {} KB",
+            id.chip_revision / 100,
+            id.chip_revision % 100,
+            id.cores,
+            id.flash_bytes >> 10,
+            id.psram_bytes >> 10
+        );
+        say!(self, "mac:  {}", Mac(id.mac));
+        self.battery();
+
+        if self.modem_on().is_err() {
+            return;
+        }
+        for query in IDENTIFY_QUERIES {
+            say!(self, "> {query}");
+            if let Err(e) = self.modem.command(query, QUERY_TIMEOUT) {
+                say!(self, "  ({e})");
+            }
+        }
+    }
+
+    /// Step 2: start the GNSS engine. A fix is then polled with `AT+CGNSSINFO`.
+    ///
+    /// # Errors
+    /// Modem power-on or GNSS power-up failure.
+    pub fn gnss_on(&mut self) -> Result<()> {
+        self.modem_on()?;
+        say!(self, "> AT+CGNSSPWR=1");
+        let result = self.modem.command("AT+CGNSSPWR=1", GNSS_TIMEOUT);
+        match result {
+            Ok(()) => say!(
+                self,
+                "GNSS on. Antenna outdoors, then repeat AT+CGNSSINFO until fix."
+            ),
+            Err(e) => say!(self, "GNSS power-up: {e}"),
+        }
+        result
+    }
+
+    /// Forward an operator AT line, powering the modem first if needed.
+    pub fn passthrough(&mut self, line: &str) {
+        if self.modem_on().is_err() {
+            return;
+        }
+        self.modem.send_raw(line);
+        if at_powers_down(line) {
+            self.modem_powered = false;
+        }
+    }
+}
