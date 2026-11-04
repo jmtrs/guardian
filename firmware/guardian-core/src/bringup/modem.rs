@@ -97,13 +97,19 @@ impl<M: Modem, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
     }
 
     /// Forward an operator AT line, powering the modem first if needed.
+    ///
+    /// A power-down line (`AT+CPOF`, `AT+CPOWD`) runs the full
+    /// [`modem_off`](Self::modem_off) sequence instead, so the cached power
+    /// state is only cleared once the modem is really off.
     pub fn passthrough(&mut self, line: &str) {
+        if at_powers_down(line) {
+            say!(self, "power-down requested: running the modem off sequence");
+            self.modem_off();
+            return;
+        }
         if self.modem_on().is_err() {
             return;
         }
         self.modem.send_raw(line);
-        if at_powers_down(line) {
-            self.modem_powered = false;
-        }
     }
 }

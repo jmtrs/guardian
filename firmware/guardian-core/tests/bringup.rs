@@ -40,13 +40,15 @@ fn passthrough_sends_line_verbatim() {
 }
 
 #[test]
-fn passthrough_power_down_invalidates_state() {
+fn passthrough_power_down_runs_full_off_sequence() {
     let fake = Fake::default();
     let mut s = fake.service();
-    s.handle_line("AT+CPOF");
-    assert!(!s.modem_powered());
     s.handle_line("!modem on");
-    assert_eq!(fake.world().power_on_calls, 2);
+    s.handle_line("at+cpof");
+    assert!(!s.modem_powered());
+    let w = fake.world();
+    assert_eq!(w.power_off_calls, 1);
+    assert_eq!(w.raw.len(), 0, "power-down must not bypass the sequence");
 }
 
 #[test]
@@ -111,7 +113,7 @@ fn sleep_turns_modem_off_holds_pins_and_sleeps() {
     );
     let w = fake.world();
     assert_eq!(
-        (w.power_off_calls, w.arm_calls, w.hold_calls, w.deep_sleeps),
+        (w.power_off_calls, w.arm_calls, w.park_calls, w.deep_sleeps),
         (1, 1, 1, 1)
     );
 }
@@ -135,7 +137,7 @@ fn sleep_refuses_when_line_stuck_high() {
         Err(Error::State)
     );
     let w = fake.world();
-    assert_eq!((w.deep_sleeps, w.hold_calls), (0, 0));
+    assert_eq!((w.deep_sleeps, w.park_calls), (0, 0));
 }
 
 #[test]
@@ -154,13 +156,26 @@ fn sleep_refuses_when_latch_cannot_be_cleared() {
 
 #[test]
 fn sleep_refuses_when_modem_pins_not_held() {
-    let fake = Fake::with(|w| w.hold_result = Err(Error::Io));
+    let fake = Fake::with(|w| w.park_result = Err(Error::Io));
     assert_eq!(
         fake.service().sleep_until_motion(Threshold::DEFAULT),
         Err(Error::Io)
     );
     assert_eq!(fake.world().deep_sleeps, 0);
     assert!(fake.printed("modem pins not held (i/o error)"));
+}
+
+#[test]
+fn sleep_refuses_when_wake_cannot_be_armed() {
+    let fake = Fake::with(|w| w.wake_arm_result = Err(Error::Io));
+    assert_eq!(
+        fake.service().sleep_until_motion(Threshold::DEFAULT),
+        Err(Error::Io)
+    );
+    let w = fake.world();
+    assert_eq!((w.park_calls, w.deep_sleeps), (0, 0));
+    drop(w);
+    assert!(fake.printed("wake source not armed"));
 }
 
 #[test]

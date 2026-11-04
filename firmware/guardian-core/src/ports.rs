@@ -33,11 +33,14 @@ pub trait Modem {
     /// Send a raw line (CRLF appended) without waiting for a result.
     fn send_raw(&mut self, line: &str);
 
-    /// Latch every modem line in its "off" level so it survives deep sleep.
+    /// Park every modem line at its "off" level and latch it so it survives
+    /// deep sleep. All-or-nothing: on error the adapter has already undone any
+    /// partial parking, so the modem stays usable without a reboot. Called only
+    /// right before [`Platform::deep_sleep`].
     ///
     /// # Errors
     /// Any failure: sleeping then would measure P1 in an unknown state.
-    fn hold_off_during_sleep(&mut self) -> Result<()>;
+    fn park_for_sleep(&mut self) -> Result<()>;
 }
 
 /// Identity of a detected sensor.
@@ -119,8 +122,16 @@ pub trait Platform {
     /// Reason for the current boot.
     fn wake_cause(&mut self) -> WakeCause;
 
-    /// Enter deep sleep with the motion line as wake source.
+    /// Configure the motion line as deep-sleep wake source. Harmless if the
+    /// sleep is then aborted: it only takes effect when sleeping.
+    ///
+    /// # Errors
+    /// If the wake source cannot be armed: sleeping would never wake on motion.
+    fn arm_motion_wake(&mut self) -> Result<()>;
+
+    /// Enter deep sleep, keeping latched pads. Requires
+    /// [`arm_motion_wake`](Self::arm_motion_wake) first.
     ///
     /// Does not return on hardware; fakes return so tests can observe it.
-    fn deep_sleep_until_motion(&mut self);
+    fn deep_sleep(&mut self);
 }

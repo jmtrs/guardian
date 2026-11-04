@@ -56,7 +56,7 @@ impl<M: Modem, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
     ///
     /// Returns the number of interrupts seen in [`WATCH_DURATION`]; 0 also when
     /// the sensor could not be probed or armed (the reason is reported). Gives
-    /// up after [`MAX_ACK_FAILURES`] consecutive failed acknowledges.
+    /// up after three consecutive failed acknowledges (bus fault).
     pub fn watch_motion(&mut self, threshold: Threshold) -> u32 {
         if self.probe().is_err() || self.arm(threshold).is_err() {
             return 0;
@@ -91,9 +91,10 @@ impl<M: Modem, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
     /// Step 4b / power test P1: modem off, motion armed, deep sleep.
     ///
     /// Refuses (and returns) when sleeping would be wrong: the latch cannot be
-    /// cleared or the line stays high (it would wake at once, in a loop), or a
-    /// modem line cannot be held (P1 would be measured in an unknown state).
-    /// On hardware, success does not return.
+    /// cleared or the line stays high (it would wake at once, in a loop), the
+    /// wake source cannot be armed (it would never wake), or a modem line
+    /// cannot be parked (P1 would be measured in an unknown state; the adapter
+    /// undoes partial parking). On hardware, success does not return.
     ///
     /// # Errors
     /// The reason for refusing, after reporting it.
@@ -105,7 +106,11 @@ impl<M: Modem, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
             say!(self, "refusing to sleep: it would wake at once");
             return Err(e);
         }
-        if let Err(e) = self.modem.hold_off_during_sleep() {
+        if let Err(e) = self.platform.arm_motion_wake() {
+            say!(self, "refusing to sleep: wake source not armed ({e})");
+            return Err(e);
+        }
+        if let Err(e) = self.modem.park_for_sleep() {
             say!(self, "refusing to sleep: modem pins not held ({e})");
             return Err(e);
         }
@@ -113,7 +118,7 @@ impl<M: Modem, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
             self,
             "P1: deep sleep, modem off. Measure current now; move sensor to wake."
         );
-        self.platform.deep_sleep_until_motion();
+        self.platform.deep_sleep();
         Ok(())
     }
 

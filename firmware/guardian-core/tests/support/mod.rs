@@ -16,8 +16,8 @@ pub struct World {
     pub command_result: Result<(), Error>,
     pub power_on_calls: u32,
     pub power_off_calls: u32,
-    pub hold_result: Result<(), Error>,
-    pub hold_calls: u32,
+    pub park_result: Result<(), Error>,
+    pub park_calls: u32,
     pub commands: Vec<String>,
     pub raw: Vec<String>,
     pub probe_result: Result<SensorInfo, Error>,
@@ -33,6 +33,7 @@ pub struct World {
     pub wake: WakeCause,
     pub battery: Option<u32>,
     pub slept: Duration,
+    pub wake_arm_result: Result<(), Error>,
     pub deep_sleeps: u32,
     pub out: String,
 }
@@ -45,8 +46,8 @@ impl Default for World {
             command_result: Ok(()),
             power_on_calls: 0,
             power_off_calls: 0,
-            hold_result: Ok(()),
-            hold_calls: 0,
+            park_result: Ok(()),
+            park_calls: 0,
             commands: Vec::new(),
             raw: Vec::new(),
             probe_result: Ok(SensorInfo {
@@ -63,6 +64,7 @@ impl Default for World {
             wake: WakeCause::PowerOn,
             battery: Some(4100),
             slept: Duration::ZERO,
+            wake_arm_result: Ok(()),
             deep_sleeps: 0,
             out: String::new(),
         }
@@ -110,10 +112,10 @@ impl Modem for Fake {
     fn send_raw(&mut self, line: &str) {
         self.0.borrow_mut().raw.push(line.to_owned());
     }
-    fn hold_off_during_sleep(&mut self) -> Result<(), Error> {
+    fn park_for_sleep(&mut self) -> Result<(), Error> {
         let mut w = self.0.borrow_mut();
-        w.hold_calls += 1;
-        w.hold_result
+        w.park_calls += 1;
+        w.park_result
     }
 }
 
@@ -161,7 +163,10 @@ impl Platform for Fake {
     fn wake_cause(&mut self) -> WakeCause {
         self.0.borrow().wake
     }
-    fn deep_sleep_until_motion(&mut self) {
+    fn arm_motion_wake(&mut self) -> Result<(), Error> {
+        self.0.borrow().wake_arm_result
+    }
+    fn deep_sleep(&mut self) {
         self.0.borrow_mut().deep_sleeps += 1;
     }
 }
