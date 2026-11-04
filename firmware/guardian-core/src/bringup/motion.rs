@@ -85,7 +85,24 @@ impl<M: Modem, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
             self.platform.delay(WATCH_POLL);
         }
         say!(self, "watch done: {hits} interrupts");
+        if hits == 0 {
+            self.explain_silent_line();
+        }
         hits
+    }
+
+    /// After a watch with no interrupts, read the sensor's own latch to tell
+    /// "no motion detected" apart from "detected, but INT1 never reached the
+    /// MCU" (wiring).
+    fn explain_silent_line(&mut self) {
+        match self.motion.acknowledge() {
+            Ok(0) => say!(self, "  sensor latched nothing: no motion above threshold"),
+            Ok(source) => say!(
+                self,
+                "  sensor latched motion (source {source:#04x}) but INT1 never rose: check INT1 -> IO34"
+            ),
+            Err(e) => say!(self, "  sensor latch unreadable: {e}"),
+        }
     }
 
     /// Step 4b / power test P1: modem off, motion armed, deep sleep.

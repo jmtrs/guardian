@@ -76,6 +76,7 @@ pub trait MotionSensor {
     fn is_triggered(&mut self) -> bool;
 
     /// Clear the latch; returns the raw interrupt source, for diagnostics.
+    /// Zero means nothing was latched.
     ///
     /// # Errors
     /// Bus errors: the latch is then still set.
