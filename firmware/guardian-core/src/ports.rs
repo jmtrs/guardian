@@ -80,6 +80,13 @@ pub trait MotionSensor {
     /// # Errors
     /// Bus errors: the latch is then still set.
     fn acknowledge(&mut self) -> Result<u8>;
+
+    /// Diagnostics for a failed [`probe`](Self::probe): call `found` with
+    /// every bus address that answers and the byte its identification
+    /// register returns. No calls means nothing answers at all (wiring,
+    /// power or bus-mode problem); a call with a foreign id means another
+    /// chip, or a sensor at an unexpected address.
+    fn scan(&mut self, found: &mut dyn FnMut(u8, u8));
 }
 
 /// Why the MCU is running.

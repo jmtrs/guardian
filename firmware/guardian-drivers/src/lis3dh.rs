@@ -18,6 +18,8 @@ use guardian_core::Error;
 pub const ADDRESSES: [u8; 2] = [0x18, 0x19];
 /// `WHO_AM_I` value of a LIS3DH (a LIS3DSH answers 0x3F).
 pub const CHIP_ID: u8 = 0x33;
+/// Valid 7-bit addresses for a bus scan (0x00–0x07 and 0x78–0x7F are reserved).
+pub const SCAN_RANGE: core::ops::RangeInclusive<u8> = 0x08..=0x77;
 
 /// Register map (datasheet `DocID17530`, §7).
 mod reg {
@@ -189,5 +191,20 @@ impl<I: I2c, P: InputPin, D: DelayNs> MotionSensor for Lis3dh<I, P, D> {
         let mut source = [0];
         Lis3dh::read(self, reg::INT1_SRC, &mut source)?; // reading clears the latch
         Ok(source[0])
+    }
+
+    /// Reads `WHO_AM_I` at every address in [`SCAN_RANGE`]; a read that fails
+    /// (no acknowledge or bus error) counts as "nothing there".
+    fn scan(&mut self, found: &mut dyn FnMut(u8, u8)) {
+        for address in SCAN_RANGE {
+            let mut id = [0];
+            if self
+                .i2c
+                .write_read(address, &[reg::WHO_AM_I], &mut id)
+                .is_ok()
+            {
+                found(address, id[0]);
+            }
+        }
     }
 }

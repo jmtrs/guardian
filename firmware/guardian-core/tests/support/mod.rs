@@ -23,6 +23,8 @@ pub struct World {
     pub cpin_failures: u32,
     pub raw: Vec<String>,
     pub probe_result: Result<SensorInfo, Error>,
+    /// (address, id register) pairs reported by `scan`.
+    pub bus: Vec<(u8, u8)>,
     pub sample: Accel,
     pub armed: Option<Threshold>,
     pub arm_calls: u32,
@@ -53,6 +55,7 @@ impl Default for World {
             commands: Vec::new(),
             cpin_failures: 0,
             raw: Vec::new(),
+            bus: Vec::new(),
             probe_result: Ok(SensorInfo {
                 address: 0x18,
                 chip_id: 0x33,
@@ -150,6 +153,12 @@ impl MotionSensor for Fake {
             w.pending_triggers = w.pending_triggers.saturating_sub(1);
         }
         w.ack_result
+    }
+    fn scan(&mut self, found: &mut dyn FnMut(u8, u8)) {
+        let bus = self.0.borrow().bus.clone(); // `found` writes to the world
+        for (address, id) in bus {
+            found(address, id);
+        }
     }
 }
 

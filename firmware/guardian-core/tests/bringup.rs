@@ -105,6 +105,7 @@ fn selftest_reports_missing_sensor() {
     let fake = Fake::with(|w| w.probe_result = Err(Error::NotFound));
     assert_eq!(fake.service().sensor_selftest(), Err(Error::NotFound));
     assert!(fake.printed("accelerometer: not found"));
+    assert!(fake.printed("nothing answers"));
 }
 
 #[test]
@@ -230,4 +231,16 @@ fn unknown_and_invalid_commands_are_reported() {
     s.handle_line("!arm x");
     assert!(fake.printed("unknown command: !reboot"));
     assert!(fake.printed("invalid argument: x"));
+}
+
+#[test]
+fn absent_sensor_reports_foreign_devices_on_the_bus() {
+    let fake = Fake::with(|w| {
+        w.probe_result = Err(Error::NotFound);
+        w.bus = vec![(0x19, 0x3f)];
+    });
+    assert_eq!(fake.service().sensor_selftest(), Err(Error::NotFound));
+    assert!(fake.printed("device at 0x19, id register 0x3f"));
+    assert!(fake.printed("no LIS3DH"));
+    assert!(!fake.printed("nothing answers"));
 }

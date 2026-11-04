@@ -123,10 +123,12 @@ impl<M: Modem, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
     }
 
     fn probe(&mut self) -> Result<SensorInfo> {
-        let info = self
-            .motion
-            .probe()
-            .inspect_err(|e| say!(self, "accelerometer: {e}"))?;
+        let info = self.motion.probe().inspect_err(|e| {
+            say!(self, "accelerometer: {e}");
+            if *e == Error::NotFound {
+                self.explain_absence();
+            }
+        })?;
         say!(
             self,
             "accelerometer at {:#04x}, id {:#04x}",
@@ -134,6 +136,26 @@ impl<M: Modem, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
             info.chip_id
         );
         Ok(info)
+    }
+
+    /// After a failed probe, tell "nothing on the bus" (wiring) apart from
+    /// "something answers, but not a LIS3DH" (chip or address).
+    fn explain_absence(&mut self) {
+        say!(self, "scanning the I2C bus...");
+        let out = &mut self.out;
+        let mut answers = 0u32;
+        self.motion.scan(&mut |address, id| {
+            answers += 1;
+            let _ = writeln!(out, "  device at {address:#04x}, id register {id:#04x}");
+        });
+        if answers == 0 {
+            say!(
+                self,
+                "  nothing answers: check VCC/GND contact, SDA=IO21, SCL=IO22, CS to 3V3"
+            );
+        } else {
+            say!(self, "  no LIS3DH (id 0x33 at 0x18/0x19) among them");
+        }
     }
 
     fn arm(&mut self, threshold: Threshold) -> Result<()> {

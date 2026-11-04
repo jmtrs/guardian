@@ -127,3 +127,19 @@ fn interrupt_line_and_acknowledge() {
         assert!(!s.is_triggered());
     });
 }
+
+#[test]
+fn scan_reports_every_answering_address_with_its_id() {
+    let t: Vec<I2c> = (0x08..=0x77u8)
+        .map(|a| match a {
+            0x19 => I2c::write_read(a, vec![0x0F], vec![0x3F]),
+            0x40 => I2c::write_read(a, vec![0x0F], vec![0x00]),
+            _ => I2c::write_read(a, vec![0x0F], vec![0]).with_error(nack()),
+        })
+        .collect();
+    run(&t, &[], |s| {
+        let mut seen = Vec::new();
+        s.scan(&mut |address, id| seen.push((address, id)));
+        assert_eq!(seen, [(0x19, 0x3F), (0x40, 0x00)]);
+    });
+}
