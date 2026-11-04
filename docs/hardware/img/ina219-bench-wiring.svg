@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Power bench (steps 5-6): INA219 in series with the 18650, read by the
+     ESP32-S3 while the T-A7670E sleeps. Pin order from the unit-1 photos. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1360" height="820" viewBox="0 0 1360 820"
+     font-family="Helvetica, Arial, sans-serif">
+  <rect width="1360" height="820" fill="#fff"/>
+  <text x="650" y="36" text-anchor="middle" font-size="26" font-weight="bold">Banco de consumo: 18650 → INA219 → T-A7670E</text>
+  <text x="650" y="58" text-anchor="middle" font-size="14" fill="#555">El INA219 mide toda la corriente que sale de la batería. Lo lee el ESP32-S3, que sigue despierto mientras la LILYGO duerme.</text>
+
+  <!-- battery -->
+  <rect x="110" y="290" width="100" height="270" rx="16" fill="#2fa84f"/>
+  <text x="160" y="420" text-anchor="middle" font-size="16" fill="#fff" transform="rotate(-90 160 420)">LiitoKala 18650-25R</text>
+  <rect x="140" y="262" width="40" height="28" fill="#9aa"/>
+  <text x="160" y="255" text-anchor="middle" font-size="18" font-weight="bold" fill="#c00">+</text>
+  <rect x="140" y="560" width="40" height="28" fill="#9aa"/>
+  <text x="160" y="606" text-anchor="middle" font-size="22" font-weight="bold">−</text>
+  <text x="60" y="440" text-anchor="middle" font-size="12" fill="#555" transform="rotate(-90 60 440)">lengüetas aisladas con cinta</text>
+
+  <!-- INA219 -->
+  <rect x="400" y="300" width="200" height="230" rx="10" fill="#1f4fb3"/>
+  <text x="470" y="420" text-anchor="middle" font-size="16" fill="#fff">INA219</text>
+  <text x="470" y="440" text-anchor="middle" font-size="12" fill="#cfe">shunt R100 (0,1 Ω)</text>
+  <g font-size="14" fill="#fff" text-anchor="end">
+    <circle cx="585" cy="330" r="8" fill="#c9a43a"/><text x="570" y="335">Vin+</text>
+    <circle cx="585" cy="365" r="8" fill="#c9a43a"/><text x="570" y="370">Vin−</text>
+    <circle cx="585" cy="400" r="8" fill="#c9a43a"/><text x="570" y="405">Sda</text>
+    <circle cx="585" cy="435" r="8" fill="#c9a43a"/><text x="570" y="440">Scl</text>
+    <circle cx="585" cy="470" r="8" fill="#c9a43a"/><text x="570" y="475">Gnd</text>
+    <circle cx="585" cy="505" r="8" fill="#c9a43a"/><text x="570" y="510">Vcc</text>
+  </g>
+
+  <!-- T-A7670E -->
+  <rect x="760" y="85" width="480" height="170" rx="12" fill="#1d1d1d"/>
+  <text x="1000" y="168" text-anchor="middle" font-size="17" fill="#bbb">LILYGO T-A7670E (cara de la batería)</text>
+  <text x="1000" y="190" text-anchor="middle" font-size="13" fill="#888">LIS3DH conectado como antes (no dibujado) · USB-C DESCONECTADO al medir</text>
+  <g font-size="9" fill="#ccc" text-anchor="middle">
+    <g fill="#555">
+      <circle cx="780" cy="110" r="6"/><circle cx="809" cy="110" r="6"/><circle cx="838" cy="110" r="6"/><circle cx="867" cy="110" r="6"/>
+      <circle cx="896" cy="110" r="6"/><circle cx="925" cy="110" r="6"/><circle cx="954" cy="110" r="6"/><circle cx="983" cy="110" r="6"/>
+      <circle cx="1012" cy="110" r="6"/><circle cx="1041" cy="110" r="6"/><circle cx="1070" cy="110" r="6"/><circle cx="1099" cy="110" r="6"/>
+      <circle cx="1128" cy="110" r="6"/><circle cx="1157" cy="110" r="6"/><circle cx="1186" cy="110" r="6"/>
+      <circle cx="780" cy="230" r="6"/><circle cx="809" cy="230" r="6"/><circle cx="838" cy="230" r="6"/><circle cx="867" cy="230" r="6"/>
+      <circle cx="896" cy="230" r="6"/><circle cx="925" cy="230" r="6"/><circle cx="954" cy="230" r="6"/><circle cx="983" cy="230" r="6"/>
+      <circle cx="1012" cy="230" r="6"/><circle cx="1041" cy="230" r="6"/><circle cx="1070" cy="230" r="6"/><circle cx="1099" cy="230" r="6"/>
+      <circle cx="1128" cy="230" r="6"/><circle cx="1157" cy="230" r="6"/><circle cx="1215" cy="230" r="6"/>
+    </g>
+    <circle cx="1215" cy="110" r="8" fill="#c9a43a"/>
+    <circle cx="1186" cy="230" r="8" fill="#c9a43a"/>
+    <text x="780" y="132">V3V3</text><text x="1186" y="132">IO12</text>
+    <text x="1215" y="132" fill="#ffd34d" font-size="11" font-weight="bold">V_BAT</text>
+    <text x="780" y="218">TX</text><text x="1157" y="218">RST</text><text x="1215" y="218">VBUS</text>
+    <text x="1186" y="218" fill="#ffd34d" font-size="11" font-weight="bold">GND</text>
+  </g>
+  <text x="1250" y="104" font-size="12" fill="#333">fila sup. 16.º</text>
+  <text x="1250" y="244" font-size="12" fill="#333">fila inf. 15.º</text>
+
+  <!-- ESP32-S3 -->
+  <rect x="820" y="430" width="280" height="170" rx="10" fill="#333"/>
+  <text x="990" y="505" text-anchor="middle" font-size="16" fill="#ddd">ESP32-S3</text>
+  <text x="990" y="527" text-anchor="middle" font-size="12" fill="#aaa">(USB al Mac)</text>
+  <g font-size="14" fill="#fff">
+    <circle cx="835" cy="460" r="8" fill="#c9a43a"/><text x="852" y="465">GPIO8</text>
+    <circle cx="835" cy="495" r="8" fill="#c9a43a"/><text x="852" y="500">GPIO9</text>
+    <circle cx="835" cy="530" r="8" fill="#c9a43a"/><text x="852" y="535">3V3</text>
+    <circle cx="835" cy="565" r="8" fill="#c9a43a"/><text x="852" y="570">GND</text>
+  </g>
+
+  <!-- ground rail -->
+  <rect x="90" y="672" width="1180" height="16" rx="4" fill="#111"/>
+  <text x="680" y="710" text-anchor="middle" font-size="14">carril − (azul) de la protoboard: masa común</text>
+
+  <!-- wires -->
+  <g fill="none" stroke-linejoin="round" stroke-linecap="round">
+    <polyline points="160,262 160,200 640,200 640,330 585,330" stroke="#e02020" stroke-width="8"/>
+    <polyline points="585,365 680,365 680,76 1215,76 1215,110" stroke="#ff7a00" stroke-width="8"/>
+    <polyline points="160,588 160,672" stroke="#111" stroke-width="8"/>
+    <polyline points="1186,230 1186,672" stroke="#111" stroke-width="5"/>
+    <polyline points="585,470 620,470 620,672" stroke="#111" stroke-width="5"/>
+    <polyline points="835,565 800,565 800,672" stroke="#111" stroke-width="5"/>
+    <polyline points="585,400 760,400 760,460 835,460" stroke="#2a6fe0" stroke-width="5"/>
+    <polyline points="585,435 740,435 740,495 835,495" stroke="#e0b800" stroke-width="5"/>
+    <polyline points="585,505 720,505 720,530 835,530" stroke="#c03030" stroke-width="5"/>
+  </g>
+  <g font-size="15" font-weight="bold">
+    <text x="300" y="192" fill="#e02020">1</text>
+    <text x="900" y="70" fill="#ff7a00">2</text>
+    <text x="172" y="640">3</text>
+    <text x="1196" y="640">4</text>
+    <text x="630" y="640">5</text>
+    <text x="772" y="640">6</text>
+    <text x="680" y="394" fill="#2a6fe0">7</text>
+    <text x="680" y="429" fill="#b39000">8</text>
+    <text x="650" y="499" fill="#c03030">9</text>
+  </g>
+
+  <!-- legend -->
+  <g font-size="14">
+    <text x="90" y="745" font-weight="bold">Potencia (cable grueso, corto):</text>
+    <text x="90" y="765">1  Batería +  → INA219 Vin+</text>
+    <text x="90" y="785">2  INA219 Vin− → LILYGO V_BAT</text>
+    <text x="90" y="805">3  Batería −  → carril −   (conectar la ÚLTIMA)</text>
+    <text x="520" y="745" font-weight="bold">Masa común:</text>
+    <text x="520" y="765">4  LILYGO GND → carril −</text>
+    <text x="520" y="785">5  INA219 Gnd → carril −</text>
+    <text x="520" y="805">6  ESP32-S3 GND → carril −</text>
+    <text x="880" y="745" font-weight="bold">Lectura (dupont):</text>
+    <text x="880" y="765">7  INA219 Sda → S3 GPIO8</text>
+    <text x="880" y="785">8  INA219 Scl → S3 GPIO9</text>
+    <text x="880" y="805">9  INA219 Vcc → S3 3V3</text>
+  </g>
+</svg>
