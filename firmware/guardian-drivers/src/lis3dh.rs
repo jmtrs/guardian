@@ -165,6 +165,9 @@ impl<I: I2c, P: InputPin, D: DelayNs> MotionSensor for Lis3dh<I, P, D> {
             (reg::CTRL4, val::CTRL4_BDU_HR),
             (reg::CTRL5, val::CTRL5_LIR_INT1),
             (reg::INT1_THS, steps),
+            // Duration 0: one sample over threshold latches. Maximum
+            // sensitivity for the bench; filtering of spurious wakes is tuned
+            // in the vehicle, not here.
             (reg::INT1_DURATION, 0),
         ];
         for (register, value) in sequence {
