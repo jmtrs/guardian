@@ -11,7 +11,7 @@ use embedded_hal::delay::DelayNs;
 use embedded_hal::digital::InputPin;
 use embedded_hal::i2c::I2c;
 use guardian_core::accel::{Accel, Threshold};
-use guardian_core::ports::{MotionSensor, SensorInfo};
+use guardian_core::ports::{Latch, MotionSensor, SensorInfo};
 use guardian_core::Error;
 
 /// I²C addresses: SA0/SDO low, then high.
@@ -35,6 +35,8 @@ mod reg {
     pub const INT1_SRC: u8 = 0x31;
     pub const INT1_THS: u8 = 0x32;
     pub const INT1_DURATION: u8 = 0x33;
+    /// `INT1_SRC` bit: interrupt active (the others are live axis flags).
+    pub const INT1_SRC_IA: u8 = 0x40;
     /// Sub-address MSB: auto-increment for multi-byte reads.
     pub const AUTO_INCREMENT: u8 = 0x80;
 }
@@ -189,10 +191,13 @@ impl<I: I2c, P: InputPin, D: DelayNs> MotionSensor for Lis3dh<I, P, D> {
         self.int1.is_high().unwrap_or(true)
     }
 
-    fn acknowledge(&mut self) -> Result<u8, Error> {
+    fn acknowledge(&mut self) -> Result<Latch, Error> {
         let mut source = [0];
         Lis3dh::read(self, reg::INT1_SRC, &mut source)?; // reading clears the latch
-        Ok(source[0])
+        Ok(Latch {
+            active: source[0] & reg::INT1_SRC_IA != 0,
+            raw: source[0],
+        })
     }
 
     /// Reads `WHO_AM_I` at every address in [`SCAN_RANGE`]; a read that fails

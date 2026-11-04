@@ -254,7 +254,8 @@ fn silent_watch_reports_motion_latched_but_line_dead() {
 
 #[test]
 fn silent_watch_reports_no_motion_when_nothing_latched() {
-    let fake = Fake::with(|w| w.ack_result = Ok(0));
+    // Live per-axis "low" flags without IA: not an interrupt.
+    let fake = Fake::with(|w| w.ack_result = Ok(0x15));
     assert_eq!(fake.service().watch_motion(Threshold::DEFAULT), 0);
     assert!(fake.printed("sensor latched nothing"));
 }

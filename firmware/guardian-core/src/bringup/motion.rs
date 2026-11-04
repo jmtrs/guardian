@@ -70,7 +70,7 @@ impl<M: Modem, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
                     Ok(source) => {
                         ack_failures = 0;
                         hits += 1;
-                        say!(self, "motion #{hits}, source {source:#04x}");
+                        say!(self, "motion #{hits}, source {source}");
                     }
                     Err(e) => {
                         say!(self, "latch not cleared: {e}");
@@ -96,10 +96,12 @@ impl<M: Modem, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
     /// MCU" (wiring).
     fn explain_silent_line(&mut self) {
         match self.motion.acknowledge() {
-            Ok(0) => say!(self, "  sensor latched nothing: no motion above threshold"),
-            Ok(source) => say!(
+            Ok(latch) if !latch.active => {
+                say!(self, "  sensor latched nothing: no motion above threshold");
+            }
+            Ok(latch) => say!(
                 self,
-                "  sensor latched motion (source {source:#04x}) but INT1 never rose: check INT1 -> IO34"
+                "  sensor latched motion (source {latch}) but INT1 never rose: check INT1 -> IO34"
             ),
             Err(e) => say!(self, "  sensor latch unreadable: {e}"),
         }

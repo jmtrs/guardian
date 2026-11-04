@@ -5,7 +5,7 @@ use embedded_hal_mock::eh1::delay::NoopDelay;
 use embedded_hal_mock::eh1::digital::{Mock as PinMock, State, Transaction as Pin};
 use embedded_hal_mock::eh1::i2c::{Mock as I2cMock, Transaction as I2c};
 use guardian_core::accel::{Accel, Threshold};
-use guardian_core::ports::{MotionSensor, SensorInfo};
+use guardian_core::ports::{Latch, MotionSensor, SensorInfo};
 use guardian_core::Error;
 use guardian_drivers::lis3dh::Lis3dh;
 
@@ -123,7 +123,13 @@ fn interrupt_line_and_acknowledge() {
     run(&t, &pin, |s| {
         s.probe().unwrap();
         assert!(s.is_triggered());
-        assert_eq!(s.acknowledge(), Ok(0x4A));
+        assert_eq!(
+            s.acknowledge(),
+            Ok(Latch {
+                active: true,
+                raw: 0x4A
+            })
+        );
         assert!(!s.is_triggered());
     });
 }

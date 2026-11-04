@@ -65,7 +65,7 @@ impl<M: Modem, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
             WakeCause::Motion => {
                 say!(self, "\n*** WAKE: motion interrupt ***");
                 match self.motion.probe().and_then(|_| self.motion.acknowledge()) {
-                    Ok(source) => say!(self, "interrupt source {source:#04x}"),
+                    Ok(source) => say!(self, "interrupt source {source}"),
                     Err(e) => say!(self, "could not clear wake latch: {e}"),
                 }
             }

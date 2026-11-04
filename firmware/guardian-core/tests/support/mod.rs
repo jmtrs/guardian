@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use guardian_core::accel::{Accel, Threshold};
 use guardian_core::bringup::Bringup;
-use guardian_core::ports::{Identity, Modem, MotionSensor, Platform, SensorInfo, WakeCause};
+use guardian_core::ports::{Identity, Latch, Modem, MotionSensor, Platform, SensorInfo, WakeCause};
 use guardian_core::Error;
 
 /// Scriptable state behind all fakes.
@@ -146,13 +146,16 @@ impl MotionSensor for Fake {
         let w = self.0.borrow();
         w.stuck_high || w.pending_triggers > 0
     }
-    fn acknowledge(&mut self) -> Result<u8, Error> {
+    fn acknowledge(&mut self) -> Result<Latch, Error> {
         let mut w = self.0.borrow_mut();
         w.ack_calls += 1;
         if w.ack_result.is_ok() {
             w.pending_triggers = w.pending_triggers.saturating_sub(1);
         }
-        w.ack_result
+        w.ack_result.map(|raw| Latch {
+            active: raw & 0x40 != 0, // LIS3DH IA bit, as the real driver
+            raw,
+        })
     }
     fn scan(&mut self, found: &mut dyn FnMut(u8, u8)) {
         let bus = self.0.borrow().bus.clone(); // `found` writes to the world

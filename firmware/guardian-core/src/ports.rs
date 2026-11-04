@@ -4,6 +4,7 @@
 //! host). Operator output is any [`core::fmt::Write`], so no port is needed
 //! for it.
 
+use core::fmt;
 use core::time::Duration;
 
 use crate::accel::{Accel, Threshold};
@@ -52,6 +53,22 @@ pub struct SensorInfo {
     pub chip_id: u8,
 }
 
+/// Interrupt latch contents, read while clearing it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Latch {
+    /// An interrupt was latched. The raw source also carries live per-axis
+    /// flags, so a non-zero source alone does not mean motion.
+    pub active: bool,
+    /// Raw source register, for diagnostics.
+    pub raw: u8,
+}
+
+impl fmt::Display for Latch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:#04x}", self.raw)
+    }
+}
+
 /// Accelerometer with a latched motion interrupt.
 pub trait MotionSensor {
     /// Detect and initialise the sensor. Idempotent.
@@ -75,12 +92,11 @@ pub trait MotionSensor {
     /// Current level of the interrupt line (`true` = motion latched).
     fn is_triggered(&mut self) -> bool;
 
-    /// Clear the latch; returns the raw interrupt source, for diagnostics.
-    /// Zero means nothing was latched.
+    /// Clear the latch and report what it held.
     ///
     /// # Errors
     /// Bus errors: the latch is then still set.
-    fn acknowledge(&mut self) -> Result<u8>;
+    fn acknowledge(&mut self) -> Result<Latch>;
 
     /// Diagnostics for a failed [`probe`](Self::probe): call `found` with
     /// every bus address that answers and the byte its identification
