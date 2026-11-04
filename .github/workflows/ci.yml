@@ -27,26 +27,45 @@ jobs:
       - name: Local simulation smoke test
         run: python -m guardian.demo
 
-  firmware-core:
-    name: Firmware core (host tests)
+  firmware-host:
+    name: Firmware core + drivers (host)
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        crate: [guardian-core, guardian-drivers]
+    defaults:
+      run:
+        working-directory: firmware/${{ matrix.crate }}
     steps:
       - uses: actions/checkout@v4
-      - name: Core unit tests (ASan + UBSan)
-        run: make -C firmware/bringup/test/host
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
 
-  firmware-build:
-    name: Firmware build (ESP-IDF v5.4.2)
+  firmware-esp32:
+    name: Firmware bring-up (xtensa-esp32-espidf)
     runs-on: ubuntu-latest
-    container: espressif/idf:v5.4.2
+    defaults:
+      run:
+        working-directory: firmware/bringup
     steps:
       - uses: actions/checkout@v4
-      - name: idf.py build
-        shell: bash
-        run: |
-          . "$IDF_PATH/export.sh"
-          cd firmware/bringup
-          idf.py build
+      - uses: esp-rs/xtensa-toolchain@v1.6
+        with:
+          default: true
+          buildtargets: esp32
+          ldproxy: true
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.espressif
+            firmware/bringup/target
+          key: esp32-${{ hashFiles('firmware/**/Cargo.toml', 'firmware/bringup/sdkconfig.defaults') }}
+      - run: cargo clippy --release -- -D warnings
+      - run: cargo build --release
 
   backend:
     name: Backend (NestJS)

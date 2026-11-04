@@ -17,7 +17,7 @@ help:
 	@echo "    make test           Run all tests"
 	@echo "    make test-backend   Run backend tests"
 	@echo "    make test-mobile    Run mobile tests"
-	@echo "    make test-firmware  Run firmware core host tests"
+	@echo "    make test-firmware  Run firmware core + driver host tests"
 	@echo "    make lint           Lint all packages"
 	@echo "    make typecheck      Typecheck all packages"
 	@echo ""
@@ -67,7 +67,8 @@ test-mobile:
 	@pnpm run test:mobile || true
 
 test-firmware:
-	@$(MAKE) -C firmware/bringup/test/host
+	@cd firmware/guardian-core && cargo test
+	@cd firmware/guardian-drivers && cargo test
 
 lint:
 	@pnpm run lint
