@@ -90,11 +90,14 @@ aparece, el cable USB-C es solo de carga.
 | SDA | IO21 |
 | CS | 3V3 (fuerza I²C) |
 | SDO | GND (dirección 0x18) |
-| INT1 | IO34 + **100 kΩ a GND** |
+| INT1 | IO34 (+ 100 kΩ a GND, recomendado) |
 | INT2, ADC1–3 | sin conectar |
 
-**El pull-down es obligatorio.** IO34 no tiene pulls internos y el wake ext0 es
-por nivel alto: con INT1 suelto, la línea flota y la placa despierta en bucle.
+**Pull-down recomendado.** INT1 del LIS3DH es push-pull: con el sensor
+alimentado, la línea siempre tiene nivel y el banco funciona sin resistencia. IO34
+no tiene pulls internos y el wake ext0 es por nivel alto. Si INT1 se suelta o el
+sensor pierde alimentación, la línea flota: la placa despierta en bucle o
+`!sleep` se niega a dormir. En el dispositivo final es obligatorio (vibración).
 
 ## Comandos (monitor serie)
 
