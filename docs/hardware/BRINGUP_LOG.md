@@ -27,3 +27,15 @@ Pasos de COMPONENTES.md: **1 (identificar revisión y variante) ✅**. El paso 2
 Pendiente detectado: `espflash` grabó su bootloader genérico (ESP-IDF v6.1), no
 el v5.4.2 que genera el build. Funciona, pero hay que grabar el bootloader del
 propio build.
+
+### Incidencia: USB-C solo funciona en una orientación
+
+Con un cable USB-C a USB-C, la placa solo recibe alimentación (y el Mac solo
+ve el CH9102) en **una** de las dos orientaciones del conector. En la otra
+no hay ni enumeración USB: parece una placa muerta. Es lo típico cuando solo
+un lado del conector lleva la resistencia CC de 5,1 kΩ. Un cable USB-A a USB-C
+no depende de CC y funciona en ambas orientaciones.
+
+Acción: marcar la orientación buena en el conector o usar un cable USB-A a C.
+Para la instalación final no importa (se alimenta desde el bloque de 12 V),
+pero hay que tenerlo presente en el banco.
