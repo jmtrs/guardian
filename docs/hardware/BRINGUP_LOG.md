@@ -100,7 +100,11 @@ Conectado: módulo LIS3DH azul con tiras soldadas, 7 cables dupont según
 
 | `!arm` 80 mg, 30 s | 15 interrupciones con toques cada 2 s, cada una limpiada | INT1 → IO34 llega. Fuentes `0x56`–`0x6a`: bit IA más los ejes |
 
-Pasos de COMPONENTES.md: **3 (LIS3DH I²C) ✅** y **4a (interrupción despierto) ✅**.
+| `!arm` en reposo, 30 s | 0 interrupciones, fuente `0x15` sin IA | Sin falsos disparos. `0x15` son flags de ejes en vivo, no una interrupción (`acknowledge` devuelve ya `Latch { active, raw }`) |
+| `!sleep` 80 mg | Primer intento rechazado (`interrupt line stuck high`, había movimiento). Segundo: deep sleep, más de 20 s sin despertar sola; un toque → `WAKE: motion interrupt`, fuente `0x5a` | Despertar por movimiento validado. La protección contra el bucle de wake funcionó |
+
+Pasos de COMPONENTES.md: **3 (LIS3DH I²C) ✅**, **4a (interrupción despierto) ✅** y
+**4b (despertar desde deep sleep) ✅**.
 Sin pull-down en INT1 no hubo falsos disparos: la salida push-pull fija el nivel.
 
 Lección: los cables dupont baratos fallan por dentro sin que se note. Antes de
