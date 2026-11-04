@@ -47,7 +47,7 @@ Reglas:
 ## Tests (sin placa)
 
 ```bash
-make test-firmware          # core (27) + drivers (11)
+make test-firmware          # core (28) + drivers (17)
 ```
 
 Los drivers verifican el tráfico I²C exacto: la receta de interrupción AN3308,
@@ -124,6 +124,24 @@ Umbral por defecto 80 mg, rango 16–2032 mg (pasos de 16 mg a ±2 g).
   retenidos en bajo, para que P1 se mida sin alimentar el módem por las líneas de señal.
 - **`!sleep` se niega** a dormir si INT1 sigue alto tras limpiar el latch, si no se
   puede leer el latch o si falla el hold de algún pin.
-- **Correlación AT**: el protocolo no tiene ids. Solo se acepta `OK`/`ERROR`
-  mientras un comando espera.
+- **Correlación AT**: el protocolo no tiene ids. `ResultGate` (en `guardian-drivers`,
+  testeado en host) cuenta los resultados que se deben a comandos con timeout o
+  a líneas de passthrough, y descarta esos antes de aceptar uno. Un comando nuevo
+  espera a que no se deba nada, máximo 2 s.
+- **Niveles al arrancar**: primero `PWRKEY` en reposo, `RESET` inactivo y `DTR`
+  bajo; al final `POWER_EN` alto, para no cortar un módem que siguió vivo tras un
+  reset del ESP32. Efecto: tras un arranque en frío o un wake, el rail del módem
+  queda energizado (módem apagado) hasta `!modem off` o `!sleep`. **Al medir
+  consumo despierto, ejecutar `!modem off` antes.**
+- **Imprecisión conocida del gate AT**: un `ERROR` no solicitado mientras se
+  deben resultados cuenta como uno de ellos. SIMCom no emite códigos finales
+  sueltos en operación normal.
+- **Arranque tras deep sleep**: `Board::take` libera los holds de los pads del
+  módem antes de que ningún driver los toque. Un pad retenido ignora las
+  escrituras y no se puede re-muxear.
+- **Aparcado todo o nada**: si falla el hold de un pin, se deshace (holds
+  liberados y TX devuelto a la UART) y el módem sigue usable sin reiniciar.
+- **Passthrough `AT+CPOF`/`AT+CPOWD`** ejecuta la secuencia completa de apagado.
+- **INT1 sin duración** (`INT1_DURATION = 0`): una sola muestra sobre el umbral
+  despierta. Es la máxima sensibilidad para banco; el filtrado se ajusta en el vehículo.
 - **Consola**: Ctrl-Z y ESC no llegan al módem (SMS en modo texto fuera de alcance).
