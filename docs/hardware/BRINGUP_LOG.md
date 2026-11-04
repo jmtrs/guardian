@@ -67,10 +67,19 @@ Pasos de COMPONENTES.md: **2 (LTE + GNSS) ✅**.
   `AT+CGNSSTST=1` y mirar la SNR por satélite en `$xxGSV`.
 - **Antena cerámica:** la cara cerámica (beige) hacia el cielo; la tapa metálica
   (blindaje del LNA) abajo.
-- **Abrir el puerto serie resetea la placa** (macOS, `POWERON_RESET`) y el rail
-  del módem (IO12, sin conducir durante el arranque) cae: el módem rearranca
-  (`*ATREADY: 1`) y el GNSS empieza en frío en cada sesión. Para pruebas largas,
-  una sola sesión abierta.
+- **Abrir el puerto serie no debe resetear la placa.** Al abrir, macOS activa
+  DTR y RTS a la vez, y el circuito de auto-reset lo ignora. El reset
+  (`POWERON_RESET` y, de paso, la caída del rail del módem: `*ATREADY: 1` y el GNSS
+  de nuevo en frío) lo causaba el script de banco: bajaba DTR y RTS antes de
+  abrir, y pyserial los aplica de uno en uno (DTR primero). Ese instante con
+  RTS=1/DTR=0 baja EN. Verificado: 3/3 aperturas sin tocar las líneas no
+  reinician, y el módem conserva su estado (NMEA activo, última posición) entre
+  sesiones. Regla: no tocar DTR/RTS al abrir; para reiniciar a propósito, pulso
+  DTR bajo con RTS alto. `espflash` reinicia adrede al flashear o monitorizar.
+- **El rail del módem no sobrevive a un reset del ESP32.** IO12 (`POWER_EN`,
+  pin de arranque) queda sin conducir desde el reset hasta `Board::take`. Un
+  reset real (flasheo, pánico, botón) apaga el módem. Es hardware: aceptado en
+  banco y a tener en cuenta en producción.
 - **Sin AGPS** el arranque en frío con una antena pasiva pequeña puede pasar de
   varios minutos. El firmware de producción debe pedir AGPS (o inyectar
   efemérides) tras registrarse en LTE.
