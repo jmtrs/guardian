@@ -61,8 +61,10 @@ mod val {
 
 /// High-pass filter settling time after arming.
 const FILTER_SETTLE: Duration = Duration::from_millis(300);
-/// Output settling after enabling sampling.
-const SAMPLING_SETTLE: Duration = Duration::from_millis(20);
+/// Output settling after enabling sampling. High-resolution mode needs 7
+/// output periods to turn on (datasheet table 12): 70 ms at 100 Hz, plus margin.
+/// Found on unit 1: with 20 ms the first sample read ~750 mg at rest.
+const SAMPLING_SETTLE: Duration = Duration::from_millis(100);
 
 /// LIS3DH on an I²C bus, with its INT1 line and a delay source.
 pub struct Lis3dh<I, P, D> {
