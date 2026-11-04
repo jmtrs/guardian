@@ -83,3 +83,22 @@ Pasos de COMPONENTES.md: **2 (LTE + GNSS) ✅**.
 - **Sin AGPS** el arranque en frío con una antena pasiva pequeña puede pasar de
   varios minutos. El firmware de producción debe pedir AGPS (o inyectar
   efemérides) tras registrarse en LTE.
+
+## 2026-11-04 · Unidad 1 · LIS3DH por I²C
+
+Conectado: módulo LIS3DH azul con tiras soldadas, 7 cables dupont según
+[el diagrama](img/lis3dh-wiring.png). Sin pull-down en INT1.
+
+| Comprobación | Resultado | Lectura |
+|---|---|---|
+| Primer intento | Nadie responde en todo el bus (0x08–0x77) | Barrido añadido a `!lis` (`1f5442f`) |
+| Niveles en reposo (pull-down interna) | SDA bajo, SCL alto | SCL alto = módulo alimentado con pull-ups. SDA no llega (`7339174`) |
+| Causa | Cable dupont azul (SDA) roto por dentro | Cambiado el cable: SDA y SCL altos |
+| Detección | `0x18`, `WHO_AM_I` = `0x33` | LIS3DH auténtico, SDO a GND |
+| Self-test en reposo | 10/10, \|a\| = 1021–1030 mg, ruido ±5 mg | **PASS**. Desviación del +2,5 %, dentro de la tolerancia del cero-g y la sensibilidad |
+| Primera muestra | ~750 mg con 20 ms de espera | El modo HR tarda 7/ODR en arrancar. Espera subida a 100 ms |
+
+Pasos de COMPONENTES.md: **3 (LIS3DH I²C) ✅**.
+
+Lección: los cables dupont baratos fallan por dentro sin que se note. Antes de
+sospechar del chip, mirar los niveles de las líneas al arrancar.
