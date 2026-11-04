@@ -13,7 +13,7 @@ y la medida P1. El firmware de producción reutilizará `guardian-core` y
 |---|---|---|
 | Lógica (dominio, casos de uso, protocolo futuro) | Rust `no_std`, sin `unsafe` | Seguridad de memoria y tipos donde viven los secretos y el protocolo v2. Tests con `cargo test` en el Mac. |
 | Drivers (LIS3DH, framing AT) | Rust `no_std` sobre `embedded-hal` 1.0 | Independientes de la HAL. Se testean con mocks de I²C/GPIO. |
-| Adapters de placa | Rust `std` sobre `esp-idf-hal` | Drivers ESP-IDF probados (UART, I²C, ADC calibrado, deep sleep). El `unsafe` queda confinado a `hold.rs` y `platform.rs`, con `SAFETY` documentado. |
+| Adapters de placa | Rust `std` sobre `esp-idf-hal` | Drivers ESP-IDF probados (UART, I²C, ADC calibrado, deep sleep). El `unsafe` queda confinado a `hold.rs`, `platform.rs`, `wiring.rs` y `modem/transport.rs`, con `SAFETY` documentado. |
 | Sistema (RTOS, drivers, sleep) | C de ESP-IDF | Lo da Espressif. No se reescribe. |
 
 ## Arquitectura (hexagonal)
@@ -33,7 +33,8 @@ y la medida P1. El firmware de producción reutilizará `guardian-core` y
  ├── board.rs     ÚNICO sitio con pines físicos → roles
  ├── modem/       A7670: potencia + AtTransport (hilo lector, Condvar)
  ├── platform.rs  identidad, ADC batería, ext0 wake, deep sleep
- ├── hold.rs      hold de pads en deep sleep (único unsafe de GPIO)
+ ├── hold.rs      hold de pads en deep sleep
+ ├── wiring.rs    niveles SDA/SCL antes del I²C: ¿llega cada cable?
  ├── console.rs   consola UART0 + Stdout: fmt::Write
  └── main.rs      composition root: cablea y entra en el bucle
 ```
@@ -112,7 +113,8 @@ sensor pierde alimentación, la línea flota: la placa despierta en bucle o
 |---|---|---|
 | `!diag` | 1–2 | chip, PSRAM, MAC, VBAT, `ATI`, `AT+SIMCOMATI`, SIM, `CSQ`, registro LTE |
 | `!gnss` → `AT+CGNSSINFO` | 2 | GNSS (antena al exterior; repetir hasta fix) |
-| `!lis` | 3 | detección + 10 muestras; PASS si todas ≈ 1 g (±150 mg) |
+| `!lis` | 3 | detección + 10 muestras; PASS si todas ≈ 1 g (±150 mg). Si no lo encuentra, barre el bus I²C |
+| (arranque) | 3 | niveles SDA/SCL con pull-down: dice qué cable no llega al módulo |
 | `!arm [mg]` | 4a | INT1 durante 30 s con la placa despierta |
 | `!sleep [mg]` | 4b / P1 | módem OFF, deep sleep, despertar por movimiento |
 | `!vbat` | — | rail de batería |

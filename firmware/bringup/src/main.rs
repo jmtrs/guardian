@@ -10,6 +10,7 @@ mod console;
 mod hold;
 mod modem;
 mod platform;
+mod wiring;
 
 use esp_idf_svc::hal::adc::attenuation::DB_12;
 use esp_idf_svc::hal::adc::oneshot::config::{AdcChannelConfig, Calibration};
@@ -33,7 +34,7 @@ fn main() -> Result<(), EspError> {
     esp_idf_svc::sys::link_patches();
     esp_idf_svc::log::EspLogger::initialize_default();
     // Releases deep-sleep pad holds before any driver touches a pin.
-    let board = Board::take(Peripherals::take()?)?;
+    let mut board = Board::take(Peripherals::take()?)?;
 
     let wake_pad = board.motion_int.pin();
     let battery_adc = AdcDriver::new(board.battery_adc)?;
@@ -67,6 +68,9 @@ fn main() -> Result<(), EspError> {
         Box::new(|line| println!("< {line}")),
     )?;
 
+    // Sampled before the I2C driver owns the pads; printed once the console is up.
+    let bus_levels = wiring::BusLevels::sample(&mut board.motion_sda, &mut board.motion_scl);
+
     // Breakouts carry their own pull-ups; internal ones are only a fallback.
     let i2c_config = I2cConfig::new()
         .baudrate(Hertz(board::MOTION_I2C_HZ))
@@ -92,6 +96,10 @@ fn main() -> Result<(), EspError> {
 
     let mut service = Bringup::new(modem, motion, platform, Stdout);
     service.announce();
+    match bus_levels {
+        Ok(levels) => println!("{levels}"),
+        Err(e) => println!("I2C wiring check failed: {e}"),
+    }
     loop {
         let line = console.read_line();
         service.handle_line(&line);
