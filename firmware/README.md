@@ -82,6 +82,13 @@ aparece, el cable USB-C es solo de carga.
 
 ## Cableado LIS3DH
 
+![Cableado LIS3DH](../docs/hardware/img/lis3dh-wiring.png)
+
+Pines leídos de la serigrafía de la unidad 1 (cara de la batería):
+[fila superior](../docs/hardware/img/t-a7670e-header-top.jpg),
+[fila inferior](../docs/hardware/img/t-a7670e-header-bottom.jpg).
+La placa viene **sin pines soldados**: hay que soldar las tiras antes de cablear.
+
 | LIS3DH | LILYGO |
 |---|---|
 | VCC | 3V3 |
