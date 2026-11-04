@@ -9,6 +9,8 @@ use esp_idf_svc::hal::uart::UartDriver;
 /// Longest operator line kept; extra characters are dropped.
 pub const MAX_LINE: usize = 256;
 
+/// Back-off after a UART read error.
+const READ_ERROR_BACKOFF: core::time::Duration = core::time::Duration::from_millis(10);
 const BACKSPACE: u8 = 0x08;
 const DELETE: u8 = 0x7F;
 
@@ -34,8 +36,14 @@ impl Console {
         echo("$ ");
         loop {
             let mut byte = [0];
-            if !matches!(self.uart.read(&mut byte, BLOCK), Ok(1)) {
-                continue;
+            match self.uart.read(&mut byte, BLOCK) {
+                Ok(1) => {}
+                Ok(_) => continue,
+                // A persistent UART fault must not spin the main task.
+                Err(_) => {
+                    std::thread::sleep(READ_ERROR_BACKOFF);
+                    continue;
+                }
             }
             match byte[0] {
                 b'\r' | b'\n' => {

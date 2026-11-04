@@ -19,6 +19,9 @@ pub use transport::LineSink;
 
 use crate::hold;
 
+/// Index of the UART TX pad in `A7670::pads`.
+const TX: usize = 4;
+
 /// PWRKEY HIGH time to switch on.
 const POWERON_PULSE: Duration = Duration::from_millis(100);
 /// PWRKEY HIGH time to switch off (LILYGO `utilities.h`, A7670).
@@ -53,19 +56,19 @@ pub struct A7670 {
     reset: PinDriver<'static, Output>,
     reset_active_high: bool,
     dtr: PinDriver<'static, Output>,
-    /// Every pad wired to the modem, including UART TX, for sleep hold.
+    /// Every pad wired to the modem, for sleep hold; UART TX at index [`TX`].
     pads: [PinId; 5],
 }
 
 impl A7670 {
-    /// Release sleep holds from a previous boot, take the pins and start the
-    /// reader thread.
+    /// Take the pins and start the reader thread. Pad holds from a previous
+    /// sleep must already be released (see [`Board::take`](crate::board::Board::take)).
     ///
     /// # Errors
     /// GPIO configuration or thread spawn failure.
     pub fn new<E, K, R, D>(
         uart: UartDriver<'static>,
-        tx_pad: PinId,
+        (tx_pad, rx_pad): (PinId, PinId),
         pins: ModemPins<E, K, R, D>,
         sink: LineSink,
     ) -> Result<Self, EspError>
@@ -82,17 +85,25 @@ impl A7670 {
             pins.dtr.pin(),
             tx_pad,
         ];
-        pads.into_iter().for_each(hold::release);
-
-        Ok(Self {
-            at: AtTransport::start(uart, sink)?,
+        let mut modem = Self {
+            at: AtTransport::start(uart, (tx_pad, rx_pad), sink)?,
             power_enable: PinDriver::output(pins.power_enable)?,
             pwrkey: PinDriver::output(pins.pwrkey)?,
             reset: PinDriver::output(pins.reset)?,
             reset_active_high: pins.reset_active_high,
             dtr: PinDriver::output(pins.dtr)?,
             pads,
-        })
+        };
+        // PinDriver::output keeps whatever the output latch holds: start from
+        // a known state. Control lines first (PWRKEY idle, reset inactive,
+        // DTR low = UART awake), supply last. Supply on so a modem that stayed
+        // alive across an MCU reset is not cut; a cold modem then sits
+        // energised but off until `!modem on`, `!modem off` or `!sleep`.
+        modem.pwrkey.set_low()?;
+        modem.set_reset(false)?;
+        modem.dtr.set_low()?;
+        modem.power_enable.set_high()?;
+        Ok(modem)
     }
 
     fn answers_at(&mut self, attempts: u32) -> bool {
@@ -124,13 +135,27 @@ impl A7670 {
         self.pulse_pwrkey(POWERON_PULSE)
     }
 
-    fn park_for_sleep(&mut self) -> Result<(), EspError> {
+    /// Drive every line to its "off" level, park TX, latch all pads.
+    fn try_park(&mut self) -> Result<(), EspError> {
         self.power_enable.set_low()?;
         self.pwrkey.set_low()?;
         self.set_reset(false)?;
         self.dtr.set_low()?;
-        hold::park_low(self.pads[4])?;
+        hold::park_low(self.pads[TX])?;
         self.pads.into_iter().try_for_each(hold::hold)
+    }
+
+    /// Undo a partial [`try_park`](Self::try_park): release every latch and
+    /// route TX back to the UART. Lines stay at their "off" levels.
+    fn rollback_park(&mut self) {
+        for pad in self.pads {
+            if let Err(e) = hold::release(pad) {
+                log::error!("GPIO{pad} stays latched after aborted park: {e}");
+            }
+        }
+        if let Err(e) = self.at.reattach() {
+            log::error!("modem TX not re-routed to UART: {e}");
+        }
     }
 }
 
@@ -181,9 +206,10 @@ impl Modem for A7670 {
         self.at.send_raw(line);
     }
 
-    fn hold_off_during_sleep(&mut self) -> Result<(), Error> {
-        self.park_for_sleep().map_err(|e| {
+    fn park_for_sleep(&mut self) -> Result<(), Error> {
+        self.try_park().map_err(|e| {
             log::error!("cannot park modem lines for sleep: {e}");
+            self.rollback_park();
             Error::Io
         })
     }

@@ -1,45 +1,52 @@
 //! AT transport over UART: a reader thread frames lines, hands every line to
-//! the sink and offers final result codes to the command waiting for them.
+//! the sink and feeds final result codes to a [`ResultGate`], which pairs them
+//! with the command waiting for them.
+//!
+//! AT has no correlation ids. The gate counts results still owed by timed-out
+//! commands and fire-and-forget passthrough lines, and drops that many before
+//! accepting one. A command first waits until nothing is owed, at most
+//! [`DRAIN_MAX`]; past that the owed results are presumed lost. The residual
+//! risk is a result arriving after [`DRAIN_MAX`] *and* after being written off.
 
-use std::sync::{Arc, Condvar, Mutex, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::Duration;
 
+use esp_idf_svc::hal::gpio::PinId;
 use esp_idf_svc::hal::uart::UartDriver;
-use esp_idf_svc::sys::{EspError, ESP_ERR_NO_MEM};
+use esp_idf_svc::sys::{self, EspError, ESP_ERR_NO_MEM};
 use guardian_core::Error;
-use guardian_drivers::at::{final_result, FinalResult, LineFramer};
+use guardian_drivers::at::{final_result, FinalResult, LineFramer, ResultGate};
 
 /// UART read timeout per reader-thread iteration, in RTOS ticks.
 const READ_TICKS: u32 = 5;
+/// Back-off after a UART read error, so a persistent fault cannot spin.
+const READ_ERROR_BACKOFF: Duration = Duration::from_millis(10);
 const READER_STACK: usize = 6 * 1024;
+/// Longest wait for results owed by earlier commands before writing them off.
+const DRAIN_MAX: Duration = Duration::from_secs(2);
 
 /// Receives every line the modem emits (responses and URCs), CR/LF stripped.
 pub type LineSink = Box<dyn Fn(&str) + Send>;
 
-/// Result slot shared with the reader thread. Results are accepted only while
-/// `awaiting`, so a late answer to an earlier (timed-out) command, or a
-/// passthrough result, cannot satisfy the next one. AT has no correlation ids;
-/// the remaining window is the instant between arming and the command
-/// reaching the modem.
-#[derive(Default)]
-struct Slot {
-    awaiting: bool,
-    result: Option<FinalResult>,
+/// Gate shared with the reader thread; the condvar signals both "result for
+/// the waiting command" and "an owed result was consumed".
+struct Shared {
+    gate: Mutex<ResultGate>,
+    changed: Condvar,
 }
 
-#[derive(Default)]
-struct Results {
-    slot: Mutex<Slot>,
-    ready: Condvar,
-}
+impl Shared {
+    fn lock(&self) -> MutexGuard<'_, ResultGate> {
+        self.gate.lock().unwrap_or_else(PoisonError::into_inner)
+    }
 
-impl Results {
-    fn offer(&self, result: FinalResult) {
-        let mut slot = self.slot.lock().unwrap_or_else(PoisonError::into_inner);
-        if slot.awaiting && slot.result.is_none() {
-            slot.result = Some(result);
-            self.ready.notify_one();
+    /// Called by the reader for every line, after the sink has run (the sink
+    /// never runs under the lock, so a slow sink cannot block `command`).
+    fn on_line(&self, line: &str) {
+        if let Some(result) = final_result(line) {
+            self.lock().offer(result);
+            self.changed.notify_all();
         }
     }
 }
@@ -47,19 +54,28 @@ impl Results {
 /// AT command channel to the modem.
 pub struct AtTransport {
     uart: Arc<UartDriver<'static>>,
-    results: Arc<Results>,
+    shared: Arc<Shared>,
+    /// UART pads, for [`reattach`](Self::reattach).
+    pads: (PinId, PinId),
 }
 
 impl AtTransport {
-    /// Start the reader thread over `uart`.
+    /// Start the reader thread over `uart`, whose TX/RX pads are `pads`.
     ///
     /// # Errors
     /// If the reader thread cannot be spawned.
-    pub fn start(uart: UartDriver<'static>, sink: LineSink) -> Result<Self, EspError> {
+    pub fn start(
+        uart: UartDriver<'static>,
+        pads: (PinId, PinId),
+        sink: LineSink,
+    ) -> Result<Self, EspError> {
         let uart = Arc::new(uart);
-        let results = Arc::new(Results::default());
-        spawn_reader(Arc::clone(&uart), Arc::clone(&results), sink)?;
-        Ok(Self { uart, results })
+        let shared = Arc::new(Shared {
+            gate: Mutex::default(),
+            changed: Condvar::new(),
+        });
+        spawn_reader(Arc::clone(&uart), Arc::clone(&shared), sink)?;
+        Ok(Self { uart, shared, pads })
     }
 
     /// Send a command and wait for its final result code.
@@ -67,52 +83,75 @@ impl AtTransport {
     /// # Errors
     /// [`Error::Rejected`] on `ERROR`, [`Error::Timeout`] if no result arrives.
     pub fn command(&self, cmd: &str, timeout: Duration) -> Result<(), Error> {
-        let mut slot = self
-            .results
-            .slot
-            .lock()
+        let (mut gate, drained) = self
+            .shared
+            .changed
+            .wait_timeout_while(self.shared.lock(), DRAIN_MAX, |g| !g.is_settled())
             .unwrap_or_else(PoisonError::into_inner);
-        *slot = Slot {
-            awaiting: true,
-            result: None,
-        };
-        drop(slot);
-        self.send_raw(cmd);
+        if drained.timed_out() {
+            log::warn!("earlier AT results never arrived; writing them off");
+            gate.force_settle();
+        }
+        gate.begin();
+        drop(gate);
+        self.write_line(cmd);
 
-        let slot = self
-            .results
-            .slot
-            .lock()
+        let (mut gate, _) = self
+            .shared
+            .changed
+            .wait_timeout_while(self.shared.lock(), timeout, |g| !g.has_result())
             .unwrap_or_else(PoisonError::into_inner);
-        let (mut slot, _) = self
-            .results
-            .ready
-            .wait_timeout_while(slot, timeout, |s| s.result.is_none())
-            .unwrap_or_else(PoisonError::into_inner);
-        slot.awaiting = false;
-        match slot.result.take() {
+        match gate.finish() {
             Some(FinalResult::Ok) => Ok(()),
             Some(FinalResult::Error) => Err(Error::Rejected),
             None => Err(Error::Timeout),
         }
     }
 
-    /// Send a raw line (CRLF appended) without waiting.
+    /// Send a raw line (CRLF appended) without waiting. If it is an AT
+    /// command, its result is owed and will be dropped by the gate instead of
+    /// satisfying a later command. Non-AT text (e.g. prompt payloads) owes
+    /// nothing. An AT line that never yields a final code (dial, data mode)
+    /// costs the next command at most [`DRAIN_MAX`] before it is written off.
     pub fn send_raw(&self, line: &str) {
-        if self
+        if line
+            .trim_start()
+            .as_bytes()
+            .get(..2)
+            .is_some_and(|p| p.eq_ignore_ascii_case(b"AT"))
+        {
+            self.shared.lock().expect_unclaimed();
+        }
+        self.write_line(line);
+    }
+
+    fn write_line(&self, line: &str) {
+        let written = self
             .uart
             .write(line.as_bytes())
-            .and_then(|_| self.uart.write(b"\r\n"))
-            .is_err()
-        {
+            .and_then(|_| self.uart.write(b"\r\n"));
+        if written.is_err() {
             log::error!("modem UART write failed");
         }
+    }
+
+    /// Route the TX/RX pads back to the UART after they were parked as GPIO.
+    ///
+    /// # Errors
+    /// If ESP-IDF rejects the pin assignment.
+    pub fn reattach(&self) -> Result<(), EspError> {
+        let (tx, rx) = self.pads;
+        // SAFETY: re-applies the pin routing of a UART this driver owns; no
+        // memory is touched. -1 keeps RTS/CTS unassigned, as configured.
+        sys::esp!(unsafe {
+            sys::uart_set_pin(self.uart.port(), i32::from(tx), i32::from(rx), -1, -1)
+        })
     }
 }
 
 fn spawn_reader(
     uart: Arc<UartDriver<'static>>,
-    results: Arc<Results>,
+    shared: Arc<Shared>,
     sink: LineSink,
 ) -> Result<(), EspError> {
     thread::Builder::new()
@@ -122,15 +161,15 @@ fn spawn_reader(
             let mut framer = LineFramer::default();
             let mut chunk = [0u8; 128];
             loop {
-                let n = uart.read(&mut chunk, READ_TICKS).unwrap_or(0);
-                framer.push(&chunk[..n], |line| {
-                    sink(line);
-                    if let Some(result) = final_result(line) {
-                        results.offer(result);
-                    }
-                });
+                match uart.read(&mut chunk, READ_TICKS) {
+                    Ok(n) => framer.push(&chunk[..n], |line| {
+                        sink(line);
+                        shared.on_line(line);
+                    }),
+                    Err(_) => thread::sleep(READ_ERROR_BACKOFF),
+                }
             }
         })
         .map(drop)
-        .map_err(|_| EspError::from_infallible::<{ ESP_ERR_NO_MEM }>())
+        .map_err(|_| EspError::from_infallible::<ESP_ERR_NO_MEM>())
 }

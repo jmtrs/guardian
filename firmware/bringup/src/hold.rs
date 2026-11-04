@@ -17,10 +17,14 @@ pub fn hold(pin: PinId) -> Result<(), EspError> {
     sys::esp!(unsafe { sys::gpio_hold_en(sys::gpio_num_t::from(pin)) })
 }
 
-/// Release a hold left by a previous boot, so the pin can be driven again.
-pub fn release(pin: PinId) {
-    // SAFETY: as in `hold`. Releasing a pad that is not held is a no-op.
-    let _ = unsafe { sys::gpio_hold_dis(sys::gpio_num_t::from(pin)) };
+/// Release a hold (e.g. left by a previous boot), so the pin can be driven
+/// and re-muxed again. Releasing a pad that is not held is a no-op.
+///
+/// # Errors
+/// If ESP-IDF rejects the pad: it then stays latched and ignores writes.
+pub fn release(pin: PinId) -> Result<(), EspError> {
+    // SAFETY: as in `hold`.
+    sys::esp!(unsafe { sys::gpio_hold_dis(sys::gpio_num_t::from(pin)) })
 }
 
 /// Keep every held digital pad latched during deep sleep.
@@ -37,15 +41,16 @@ pub fn disable_during_deep_sleep() {
 
 /// Drive a pad low as plain GPIO, detaching any peripheral routed to it.
 ///
-/// Used to park the modem UART TX line before sleep, after the UART is no
-/// longer needed.
+/// Used to park the modem UART TX line before sleep. The caller must re-route
+/// the pad to its peripheral if the sleep is aborted (see
+/// `AtTransport::reattach`).
 ///
 /// # Errors
 /// If ESP-IDF rejects the pad.
 pub fn park_low(pin: PinId) -> Result<(), EspError> {
     let gpio = sys::gpio_num_t::from(pin);
-    // SAFETY: reconfigures one pad's mux/direction; the UART that used it is
-    // never touched again before deep sleep resets the chip.
+    // SAFETY: reconfigures one pad's mux/direction only. The UART driver keeps
+    // working memory-safely; it just stops reaching the pad until re-routed.
     unsafe {
         sys::esp!(sys::gpio_reset_pin(gpio))?;
         sys::esp!(sys::gpio_set_direction(

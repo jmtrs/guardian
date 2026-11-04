@@ -32,9 +32,9 @@ use platform::Esp32Platform;
 fn main() -> Result<(), EspError> {
     esp_idf_svc::sys::link_patches();
     esp_idf_svc::log::EspLogger::initialize_default();
-    let board = Board::take(Peripherals::take()?);
+    // Releases deep-sleep pad holds before any driver touches a pin.
+    let board = Board::take(Peripherals::take()?)?;
 
-    // Platform first: it releases deep-sleep holds before anyone drives pins.
     let wake_pad = board.motion_int.pin();
     let battery_adc = AdcDriver::new(board.battery_adc)?;
     let battery_config = AdcChannelConfig {
@@ -45,7 +45,7 @@ fn main() -> Result<(), EspError> {
     let battery = AdcChannelDriver::new(battery_adc, board.battery_sense, &battery_config)?;
     let platform = Esp32Platform::new(battery, board::BATTERY_DIVIDER_X1000, wake_pad);
 
-    let modem_tx_pad = board.modem_tx.pin();
+    let modem_pads = (board.modem_tx.pin(), board.modem_rx.pin());
     let modem_uart = UartDriver::new(
         board.modem_uart,
         board.modem_tx,
@@ -56,7 +56,7 @@ fn main() -> Result<(), EspError> {
     )?;
     let modem = A7670::new(
         modem_uart,
-        modem_tx_pad,
+        modem_pads,
         ModemPins {
             power_enable: board.modem_power_enable,
             pwrkey: board.modem_pwrkey,

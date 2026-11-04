@@ -3,15 +3,20 @@
 //! Source: `Xinyuan-LilyGO/LilyGo-Modem-Series`, `examples/ATdebug/utilities.h`,
 //! block `LILYGO_T_A7670`. Cross-check against the silkscreen of the received
 //! unit. This is the only module that names physical pins: [`Board::take`]
-//! turns raw peripherals into roles.
+//! turns raw peripherals into roles, after releasing any pad hold left by a
+//! previous deep sleep (a held pad ignores writes and cannot be re-muxed, so
+//! this must happen before any driver touches a pin).
 
 use esp_idf_svc::hal::adc::ADC1;
 use esp_idf_svc::hal::gpio::{
-    Gpio1, Gpio12, Gpio21, Gpio22, Gpio25, Gpio26, Gpio27, Gpio3, Gpio34, Gpio35, Gpio4, Gpio5,
+    Gpio1, Gpio12, Gpio21, Gpio22, Gpio25, Gpio26, Gpio27, Gpio3, Gpio34, Gpio35, Gpio4, Gpio5, Pin,
 };
 use esp_idf_svc::hal::i2c::I2C0;
 use esp_idf_svc::hal::peripherals::Peripherals;
 use esp_idf_svc::hal::uart::{UART0, UART1};
+use esp_idf_svc::sys::EspError;
+
+use crate::hold;
 
 /// Modem UART baud rate.
 pub const MODEM_BAUD: u32 = 115_200;
@@ -68,11 +73,24 @@ pub struct Board {
 }
 
 impl Board {
-    /// Assign every peripheral used by Guardian to its role.
-    #[must_use]
-    pub fn take(p: Peripherals) -> Self {
+    /// Release deep-sleep pad holds, then assign every peripheral to its role.
+    ///
+    /// # Errors
+    /// If a held pad cannot be released (it would silently ignore writes).
+    pub fn take(p: Peripherals) -> Result<Self, EspError> {
         let pins = p.pins;
-        Self {
+        hold::disable_during_deep_sleep();
+        // Every pad `modem::A7670::park_for_sleep` latches.
+        [
+            pins.gpio12.pin(),
+            pins.gpio4.pin(),
+            pins.gpio5.pin(),
+            pins.gpio25.pin(),
+            pins.gpio26.pin(),
+        ]
+        .into_iter()
+        .try_for_each(hold::release)?;
+        Ok(Self {
             console_uart: p.uart0,
             console_tx: pins.gpio1,
             console_rx: pins.gpio3,
@@ -89,6 +107,6 @@ impl Board {
             motion_sda: pins.gpio21,
             motion_scl: pins.gpio22,
             motion_int: pins.gpio34,
-        }
+        })
     }
 }

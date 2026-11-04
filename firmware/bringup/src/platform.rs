@@ -8,6 +8,7 @@ use esp_idf_svc::hal::adc::AdcChannel;
 use esp_idf_svc::hal::gpio::PinId;
 use esp_idf_svc::sys;
 use guardian_core::ports::{Identity, Platform, WakeCause};
+use guardian_core::Error;
 
 use crate::hold;
 
@@ -30,11 +31,10 @@ pub struct Esp32Platform<C: AdcChannel> {
 }
 
 impl<C: AdcChannel> Esp32Platform<C> {
-    /// Build the adapter. Releases the global deep-sleep hold left by a previous
-    /// sleep; call it before any other adapter drives pins.
+    /// Build the adapter. Pad holds from a previous sleep are released by
+    /// [`Board::take`](crate::board::Board::take), not here.
     #[must_use]
     pub fn new(battery: BatteryChannel<C>, divider_x1000: u32, motion_wake: PinId) -> Self {
-        hold::disable_during_deep_sleep();
         Self {
             battery,
             divider_x1000,
@@ -86,17 +86,19 @@ impl<C: AdcChannel> Platform for Esp32Platform<C> {
         }
     }
 
-    fn deep_sleep_until_motion(&mut self) {
-        hold::enable_during_deep_sleep();
+    fn arm_motion_wake(&mut self) -> Result<(), Error> {
         // SAFETY: configures ext0 on an RTC pad number from a HAL pin.
-        let armed = sys::esp!(unsafe {
+        sys::esp!(unsafe {
             sys::esp_sleep_enable_ext0_wakeup(sys::gpio_num_t::from(self.motion_wake), 1)
-        });
-        if let Err(e) = armed {
-            log::error!("cannot arm ext0 wake: {e}; staying awake");
-            hold::disable_during_deep_sleep();
-            return;
-        }
+        })
+        .map_err(|e| {
+            log::error!("cannot arm ext0 wake: {e}");
+            Error::Io
+        })
+    }
+
+    fn deep_sleep(&mut self) {
+        hold::enable_during_deep_sleep();
         thread::sleep(SLEEP_FLUSH);
         // SAFETY: never returns; the chip resets on wake.
         unsafe { sys::esp_deep_sleep_start() }
