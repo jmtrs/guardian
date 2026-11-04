@@ -19,6 +19,8 @@ pub struct World {
     pub park_result: Result<(), Error>,
     pub park_calls: u32,
     pub commands: Vec<String>,
+    /// `AT+CPIN?` is rejected this many times before succeeding.
+    pub cpin_failures: u32,
     pub raw: Vec<String>,
     pub probe_result: Result<SensorInfo, Error>,
     pub sample: Accel,
@@ -49,6 +51,7 @@ impl Default for World {
             park_result: Ok(()),
             park_calls: 0,
             commands: Vec::new(),
+            cpin_failures: 0,
             raw: Vec::new(),
             probe_result: Ok(SensorInfo {
                 address: 0x18,
@@ -107,6 +110,10 @@ impl Modem for Fake {
     fn command(&mut self, cmd: &str, _timeout: Duration) -> Result<(), Error> {
         let mut w = self.0.borrow_mut();
         w.commands.push(cmd.to_owned());
+        if cmd == "AT+CPIN?" && w.cpin_failures > 0 {
+            w.cpin_failures -= 1;
+            return Err(Error::Rejected);
+        }
         w.command_result
     }
     fn send_raw(&mut self, line: &str) {

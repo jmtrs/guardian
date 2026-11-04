@@ -4,6 +4,8 @@ mod support;
 
 use guardian_core::accel::{Accel, Threshold};
 use guardian_core::bringup::WATCH_DURATION;
+use std::time::Duration;
+
 use guardian_core::Error;
 use support::Fake;
 
@@ -15,11 +17,33 @@ fn identify_powers_modem_once_and_runs_queries() {
     s.identify();
     let w = fake.world();
     assert_eq!(w.power_on_calls, 1);
-    assert_eq!(w.commands.len(), 22);
+    assert_eq!(w.commands.len(), 2 * (4 + 1 + 7)); // + one SIM poll each
     assert_eq!(w.commands[0], "ATE0");
     drop(w);
     assert!(fake.printed("chip: rev v3.1"));
     assert!(fake.printed("vbat: 4100 mV"));
+}
+
+#[test]
+fn identify_waits_for_sim_before_network_queries() {
+    let fake = Fake::with(|w| w.cpin_failures = 3);
+    fake.service().identify();
+    let w = fake.world();
+    let first_network = w.commands.iter().position(|c| c == "AT+CICCID").unwrap();
+    let polls = w.commands[..first_network]
+        .iter()
+        .filter(|c| *c == "AT+CPIN?")
+        .count();
+    assert_eq!(polls, 4 + 1); // 3 rejected + 1 ok, then the reported query
+    assert_eq!(w.slept, Duration::from_secs(3));
+}
+
+#[test]
+fn identify_reports_sim_never_ready_and_still_queries() {
+    let fake = Fake::with(|w| w.cpin_failures = u32::MAX);
+    fake.service().identify();
+    assert!(fake.printed("SIM not ready after 20s"));
+    assert!(fake.world().commands.iter().any(|c| c == "AT+CPSI?"));
 }
 
 #[test]
