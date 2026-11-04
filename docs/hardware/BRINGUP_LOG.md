@@ -39,3 +39,38 @@ no depende de CC y funciona en ambas orientaciones.
 Acción: marcar la orientación buena en el conector o usar un cable USB-A a C.
 Para la instalación final no importa (se alimenta desde el bloque de 12 V),
 pero hay que tenerlo presente en el banco.
+
+## 2026-11-04 · Unidad 1 · LTE + GNSS
+
+Conectado: placa por USB-C, SIM Orange (datos), antena LTE FPC en el IPEX
+superior y antena cerámica GNSS en el IPEX "GNSS" junto al USB-C. Sin LIS3DH ni
+batería. Firmware `bringup` en `3f032b3`.
+
+| Comprobación | Resultado | Lectura |
+|---|---|---|
+| SIM | `+CPIN: READY` | Requiere esperar a la SIM tras arrancar (corregido en `3f032b3`) |
+| Cobertura | `+CSQ: 28` (≈ −57 dBm) | Muy buena, en interior |
+| Registro | `+CEREG: 0,1`, `+COPS: 0,2,"21403",7` | Orange ES, LTE |
+| Celda | `+CPSI: LTE,Online,…,EUTRAN-BAND1` | Banda 1 (2100 MHz) |
+| GNSS | `+CGNSSPWR: READY!`, `AT+CGNSSMODE?` = 3 | GPS + GLONASS + Galileo + BDS |
+| AGPS | `AT+CAGPS` → `+AGPS: success.` | Descarga por LTE; hay que esperar a `READY!` antes de pedirlo |
+| Fix | < 30 s tras AGPS; 150/150 s con fix, 9 satélites de media (máx. 11), HDOP 2,0 (mín. 1,23) | Paso 2 validado. Coordenadas no registradas |
+| SNR máxima | 44–46 dB-Hz | La cadena de antena GNSS está bien |
+
+Pasos de COMPONENTES.md: **2 (LTE + GNSS) ✅**.
+
+### Lecciones de banco GNSS
+
+- **Vista de cielo manda.** Junto a una ventana solo entraban satélites de un
+  lado (3 en el horizonte NO, cenit sin señal) y no había fix en 10 min.
+  Cambiando de sitio: fix inmediato. Diagnóstico: `AT+CGNSSPORTSWITCH=0,1` +
+  `AT+CGNSSTST=1` y mirar la SNR por satélite en `$xxGSV`.
+- **Antena cerámica:** la cara cerámica (beige) hacia el cielo; la tapa metálica
+  (blindaje del LNA) abajo.
+- **Abrir el puerto serie resetea la placa** (macOS, `POWERON_RESET`) y el rail
+  del módem (IO12, sin conducir durante el arranque) cae: el módem rearranca
+  (`*ATREADY: 1`) y el GNSS empieza en frío en cada sesión. Para pruebas largas,
+  una sola sesión abierta.
+- **Sin AGPS** el arranque en frío con una antena pasiva pequeña puede pasar de
+  varios minutos. El firmware de producción debe pedir AGPS (o inyectar
+  efemérides) tras registrarse en LTE.
