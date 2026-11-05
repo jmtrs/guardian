@@ -121,7 +121,7 @@ sería viable si se explican los ~15 mA de más del módem en sleep.
 - [ ] Causa de wake UNDEFINED tras un deep sleep (visto una vez).
 
 ### Medidas y hardware
-- [ ] **Unidad 1: sustituir U8 (protección DW06D), dañada el 2026-11-05** (humo
+- [ ] **Unidad 1: sustituir U8 (DW06D) y Q4 (AO3400), dañados el 2026-11-05** (humo
       al final de una carga, ~4 Ω en el lado − de la batería). Hasta entonces,
       solo con USB y sin batería. Ver la incidencia en el [registro](hardware/BRINGUP_LOG.md).
 - [ ] Rediseñar el banco de consumo para no conectar y desconectar con la
