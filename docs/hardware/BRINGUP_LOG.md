@@ -210,3 +210,14 @@ Hipótesis por comprobar, de más a menos probable:
 2. Convertidor o regulador del raíl del módem en la placa, con pérdidas a baja carga.
 3. eDRX concedido pero no aplicado: los picos de paging siguen apareciendo
    cada pocos segundos.
+
+Despertar desde P2b con un toque: `rst:0x5 DEEPSLEEP_RESET`, `*** WAKE: motion
+interrupt ***`, fuente `0x59`. El módem sigue registrado al despertar
+(`+CEREG: 0,1`, `CSQ 29`) y responde en cuanto DTR baja: **sin los ~30 s ni
+los ~0,9 mAh del registro de P3**. Esta vez la causa de wake se reportó bien;
+el `power-on / reset` tras un `DEEPSLEEP_RESET` del caso anterior sigue
+pendiente.
+
+Pasos de COMPONENTES.md: **P1 ✅**, **P2b ✅** (valor anómalo, en
+investigación), **P3 ✅** (desde módem apagado). P2a (VBUS) y P4 (GNSS)
+pendientes.
