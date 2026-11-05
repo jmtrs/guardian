@@ -17,6 +17,7 @@ use crate::power::PowerSample;
 /// sink, not through this trait.
 pub trait Modem {
     /// Full power-on sequence; returns once the modem answers `AT`.
+    /// Idempotent: a modem that already answers is reused, not restarted.
     ///
     /// # Errors
     /// [`Error::Timeout`](crate::Error::Timeout) if it never answers.

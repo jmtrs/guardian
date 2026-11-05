@@ -54,7 +54,7 @@ Reglas:
 ## Tests (sin placa)
 
 ```bash
-make test-firmware          # core (38) + drivers (25)
+make test-firmware          # core (39) + drivers (25)
 ```
 
 Los drivers verifican el tráfico I²C exacto: la receta de interrupción AN3308,

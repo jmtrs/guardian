@@ -39,14 +39,17 @@ pub(crate) const SIM_READY_TIMEOUT: Duration = Duration::from_secs(20);
 const SIM_POLL: Duration = Duration::from_secs(1);
 
 impl<M: Modem, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
-    /// Power the modem on (no-op if already on).
+    /// Power the modem on, or confirm it still answers.
+    ///
+    /// Always asks the port: the cached state goes stale when the modem dies
+    /// on its own (found on unit 1: a supply sag during LTE attach switched
+    /// it off and a cached "on" turned `!modem on` into a silent no-op).
+    /// [`Modem::power_on`] reuses a modem that already answers, so this is
+    /// cheap when it is on.
     ///
     /// # Errors
     /// Propagates the power-on failure, after reporting it.
     pub fn modem_on(&mut self) -> Result<()> {
-        if self.modem_powered {
-            return Ok(());
-        }
         let result = self.modem.power_on();
         self.modem_powered = result.is_ok();
         if let Err(e) = result {

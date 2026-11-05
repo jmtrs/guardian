@@ -10,13 +10,13 @@ use guardian_core::Error;
 use support::Fake;
 
 #[test]
-fn identify_powers_modem_once_and_runs_queries() {
+fn identify_checks_modem_power_every_time_and_runs_queries() {
     let fake = Fake::default();
     let mut s = fake.service();
     s.identify();
     s.identify();
     let w = fake.world();
-    assert_eq!(w.power_on_calls, 1);
+    assert_eq!(w.power_on_calls, 2);
     assert_eq!(w.commands.len(), 2 * (4 + 1 + 7)); // + one SIM poll each
     assert_eq!(w.commands[0], "ATE0");
     drop(w);
@@ -73,6 +73,19 @@ fn passthrough_power_down_runs_full_off_sequence() {
     let w = fake.world();
     assert_eq!(w.power_off_calls, 1);
     assert_eq!(w.raw.len(), 0, "power-down must not bypass the sequence");
+}
+
+#[test]
+fn modem_on_retries_after_modem_died_on_its_own() {
+    let fake = Fake::default();
+    let mut s = fake.service();
+    s.handle_line("!modem on");
+    // Supply sag: the modem switches off without the service knowing.
+    fake.0.borrow_mut().power_on_result = Err(Error::Timeout);
+    s.handle_line("!modem on");
+    assert_eq!(fake.world().power_on_calls, 2);
+    assert!(!s.modem_powered());
+    assert!(fake.printed("modem power-on failed: timeout"));
 }
 
 #[test]
