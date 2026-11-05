@@ -127,3 +127,29 @@ corregido.
 
 Con USB y sin celda, `!vbat` lee 4268 mV: es la salida del cargador CN3065,
 no una batería.
+
+## 2026-11-05 · Unidad 1 · P1 en el banco de consumo
+
+Banco: INA219 en serie con la 18650 (fuera del portapilas, − al contacto − del
+portapilas), leído por un ESP32-S3 (`firmware/power-bench`). Cero del INA219
+sin corriente: −0,20 mA (−0,10 mA en otra sesión); se resta.
+
+| Medida | Resultado | Lectura |
+|---|---|---|
+| Despierta, consola esperando, módem OFF | 47,0 mA a 3,76 V | Línea base de la ESP32 a 160 MHz |
+| **P1**: `!sleep`, deep sleep, módem OFF, USB desconectado | lectura 1,00 mA estable durante 2 min → **≈ 1,2 mA** (±0,1) | Muy por encima de ESP32 (~10 µA) + LIS3DH (~11 µA): el resto es la placa. Pendiente de desglosar |
+| P1 con la consola puenteada al S3 (cables 10/11) | Idéntico, 1,00 mA | El TX del S3 en reposo no alimenta la placa (< 0,1 mA) |
+| `!vbat` frente al INA219 | 3834 mV frente a 3760 mV | El ADC con divisor ×2 lee un 2 % alto. Pendiente de calibrar con multímetro |
+
+Orientativo: 2500 mAh / 1,2 mA ≈ 87 días solo con P1, sin despertares ni envíos.
+
+Incidencias:
+
+- La batería se desconectó de la placa varias veces sin manipulación aparente:
+  0 mA y 0,48 V en el bus. Se recuperó tocando las uniones.
+- Resistencia del camino de potencia: la tensión baja 24–30 mV entre 1,2 mA y
+  47 mA, es decir **≈ 0,5–0,6 Ω** (dupont, pinza y protoboard). Con los picos
+  de ~2 A del LTE caerían más de 1 V. Antes de P3/P4: cables 1–3 gruesos,
+  cortos y soldados.
+- Con la LILYGO sin alimentar, el cable de consola del S3 la eleva a ~1 V (al
+  revés que en reposo). No medir con la LILYGO apagada y el puente conectado.
