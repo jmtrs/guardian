@@ -153,3 +153,37 @@ Incidencias:
   cortos y soldados.
 - Con la LILYGO sin alimentar, el cable de consola del S3 la eleva a ~1 V (al
   revés que en reposo). No medir con la LILYGO apagada y el puente conectado.
+
+## 2026-11-05 · Unidad 1 · P3 y primer P2b (banco INA219, consola por el S3)
+
+Consola de la LILYGO puenteada por el S3 (`power-bench`, cables 10/11), USB de
+la LILYGO desconectado salvo donde se indica.
+
+| Medida | Resultado | Lectura |
+|---|---|---|
+| **P3** `!modem on` → registrado (`PB DONE`) | **≈ 0,94 mAh en ~32 s**, ESP32 incluida | 9 s de ellos son la comprobación previa del adapter (`answers_at(3)`, 0,12 mAh): optimizable |
+| Módem arrancando | 88–96 mA (total) | |
+| Registro y `PDN ACT` | 130–217 mA de media por segundo, picos de 297–416 mA en ventanas de 70 ms | |
+| LTE registrado, en reposo, `CSCLK=0` | ≈ 81 mA total, ≈ 34 mA el módem | |
+| P2b parcial: `AT+CSCLK=2`, ESP32 despierta | 65,7 mA total → **≈ 18 mA el módem**, suelo de 62,3 mA en 70 ms | Lejos de los 2–3 mA esperables en sleep. DTR estaba en bajo (lo fija `power_on`) |
+| `AT+CEDRXS=1,4,"0101"` | Concedido por la red (`+CEDRXRDP: 4,"0101","0101","0000"`), pero 78,5 mA durante 2 min | Tras los AT el módem no volvió a dormir; sin conclusión |
+| `AT+CPSMS?` | PSM desactivado. `AT+CEREG=4` no soportado | |
+
+Incidencias del banco:
+
+- Con 0,6 Ω en el camino (medido en estado estable: 266,6 mA a 3,616 V frente
+  a 47 mA a 3,748 V), el pico de `PDN ACT` apagó el módem en 3 de 5 intentos.
+  Una vez se quedó a 266,6 mA planos durante 15 s antes de apagarse. Rodeo: que
+  se registre con el USB conectado y desenchufarlo después. Al desenchufar, el
+  módem se reinició y volvió a registrarse con la batería.
+- Una vez el S3 se reinició por watchdog (`TG0WDT_SYS_RST`, PC en `int_wdt`
+  `tick_hook`) en la misma fase. Ahora lo anuncia (`bbc1f0e`). No se ha
+  reproducido.
+- `!modem on` no hacía nada tras un apagado espontáneo del módem: estado en
+  caché. Corregido en `b0b5ce5`; falta regrabar la unidad.
+- Tras un despertar real (`rst:0x5 DEEPSLEEP_RESET`), `announce` dijo
+  "power-on / reset" (`esp_sleep_get_wakeup_cause` = UNDEFINED). Pendiente de
+  investigar.
+
+Pendiente para cerrar P2: sleep por DTR (`AT+CSCLK=1` + DTR alto) controlado
+por firmware, con la ESP32 en deep sleep y los pads del módem retenidos.
