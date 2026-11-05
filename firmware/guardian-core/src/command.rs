@@ -33,6 +33,8 @@ pub enum Command<'a> {
     Standby(Threshold),
     /// `!vbat`: battery rail.
     Battery,
+    /// `!event`: sign and send one heartbeat to the backend (step 7).
+    Event,
     /// Not a `!` line: send to the modem as-is (leading spaces trimmed).
     At(&'a str),
     /// `!` followed by an unrecognised word.
@@ -62,6 +64,7 @@ impl<'a> Command<'a> {
             "gnss" => Self::no_argument(Self::Gnss, rest),
             "lis" => Self::no_argument(Self::Sensor, rest),
             "vbat" => Self::no_argument(Self::Battery, rest),
+            "event" => Self::no_argument(Self::Event, rest),
             "arm" => Self::threshold(rest).map_or(Self::InvalidArgument(rest), Self::Arm),
             "sleep" => Self::threshold(rest).map_or(Self::InvalidArgument(rest), Self::Sleep),
             "standby" => Self::threshold(rest).map_or(Self::InvalidArgument(rest), Self::Standby),
@@ -127,6 +130,7 @@ mod tests {
         assert_eq!(Command::parse(" ! gnss "), Command::Gnss);
         assert_eq!(Command::parse("!lis"), Command::Sensor);
         assert_eq!(Command::parse("!vbat"), Command::Battery);
+        assert_eq!(Command::parse("!event"), Command::Event);
         assert_eq!(Command::parse("!modem on"), Command::ModemOn);
         assert_eq!(Command::parse("!modem  off"), Command::ModemOff);
     }

@@ -4,15 +4,18 @@
 //! al recibir las piezas". The service depends only on [ports](crate::ports)
 //! and a [`fmt::Write`] sink, so it runs on the board and on the host alike.
 
+mod event;
 mod modem;
 mod motion;
+
+pub use event::DeviceIdentity;
 
 use core::fmt::{self, Write};
 use core::time::Duration;
 
 use crate::accel::Threshold;
 use crate::command::Command;
-use crate::ports::{Modem, MotionSensor, Platform, WakeCause};
+use crate::ports::{Modem, MotionSensor, Platform, Uplink, WakeCause};
 
 /// Samples taken by the sensor self-test.
 pub const SELFTEST_SAMPLES: u32 = 10;
@@ -39,9 +42,10 @@ pub struct Bringup<M, S, P, W> {
     platform: P,
     out: W,
     modem_powered: bool,
+    identity: Option<DeviceIdentity>,
 }
 
-impl<M: Modem, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
+impl<M: Modem + Uplink, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
     /// Build a service over the given ports and operator sink.
     pub fn new(modem: M, motion: S, platform: P, out: W) -> Self {
         Self {
@@ -50,7 +54,15 @@ impl<M: Modem, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
             platform,
             out,
             modem_powered: false,
+            identity: None,
         }
+    }
+
+    /// Give the service the device identity needed by `!event`.
+    #[must_use]
+    pub fn with_identity(mut self, identity: DeviceIdentity) -> Self {
+        self.identity = Some(identity);
+        self
     }
 
     /// Last known modem power state.
@@ -88,6 +100,7 @@ impl<M: Modem, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
              \x20 !sleep [mg]    P1: modem off, deep sleep until motion\n\
              \x20 !standby [mg]  P2: modem in LTE sleep, deep sleep until motion\n\
              \x20 !vbat          battery rail\n\
+             \x20 !event         step 7: sign and send a heartbeat to the backend\n\
              \x20 !help\n",
             WATCH_DURATION.as_secs(),
             Threshold::DEFAULT.mg()
@@ -128,6 +141,9 @@ impl<M: Modem, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
                 let _ = self.sleep_with_lte(threshold);
             }
             Command::Battery => self.battery(),
+            Command::Event => {
+                let _ = self.send_heartbeat();
+            }
             Command::At(text) => self.passthrough(text),
             Command::Unknown(word) => say!(self, "unknown command: !{word} (try !help)"),
             Command::InvalidArgument(arg) => say!(self, "invalid argument: {arg}"),

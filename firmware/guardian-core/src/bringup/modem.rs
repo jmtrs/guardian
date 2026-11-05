@@ -6,7 +6,7 @@ use core::time::Duration;
 use super::{say, Bringup, Mac};
 use crate::command::at_powers_down;
 use crate::error::Result;
-use crate::ports::{Modem, MotionSensor, Platform};
+use crate::ports::{Modem, MotionSensor, Platform, Uplink};
 
 /// Timeout for identification and network queries.
 const QUERY_TIMEOUT: Duration = Duration::from_secs(5);
@@ -38,7 +38,7 @@ pub(crate) const SIM_READY_TIMEOUT: Duration = Duration::from_secs(20);
 /// Poll period while waiting for the SIM.
 const SIM_POLL: Duration = Duration::from_secs(1);
 
-impl<M: Modem, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
+impl<M: Modem + Uplink, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
     /// Power the modem on, or confirm it still answers.
     ///
     /// Always asks the port: the cached state goes stale when the modem dies

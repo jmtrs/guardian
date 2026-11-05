@@ -9,6 +9,7 @@ publish = false
 
 [dependencies]
 guardian-core = { path = "../guardian-core" }
+guardian-protocol = { path = "../guardian-protocol" }
 embedded-hal = "1.0"
 
 [dev-dependencies]

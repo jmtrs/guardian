@@ -6,7 +6,7 @@ use core::time::Duration;
 use super::{say, Bringup, SELFTEST_PERIOD, SELFTEST_SAMPLES, WATCH_DURATION, WATCH_POLL};
 use crate::accel::Threshold;
 use crate::error::{Error, Result};
-use crate::ports::{Modem, MotionSensor, Platform, SensorInfo};
+use crate::ports::{Modem, MotionSensor, Platform, SensorInfo, Uplink};
 
 /// Settling time after acknowledging a latch before re-checking the line.
 const RELATCH_CHECK: Duration = Duration::from_millis(50);
@@ -38,7 +38,7 @@ impl ModemSleep {
     }
 }
 
-impl<M: Modem, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
+impl<M: Modem + Uplink, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
     /// Step 3: detect the accelerometer and check it reads ~1 g at rest.
     ///
     /// # Errors

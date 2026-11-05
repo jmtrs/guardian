@@ -58,7 +58,9 @@ fn body_and_signature_match_reference() {
     let key = RootSecret::from_hex(ROOT)
         .unwrap()
         .derive(&device(), Context::Event);
-    assert_eq!(key.sign(body.as_bytes()).to_string(), SIGNATURE);
+    let signature = key.sign(body.as_bytes());
+    assert_eq!(signature.to_string(), SIGNATURE);
+    assert_eq!(signature.hex().as_str(), SIGNATURE);
 }
 
 #[test]

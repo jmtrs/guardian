@@ -10,6 +10,7 @@ use core::time::Duration;
 use crate::accel::{Accel, Threshold};
 use crate::error::Result;
 use crate::power::PowerSample;
+use guardian_protocol::time::UtcTime;
 
 /// Cellular modem with an AT interface and GNSS.
 ///
@@ -54,6 +55,39 @@ pub trait Modem {
     /// # Errors
     /// Any failure: sleeping then would measure P2 in an unknown state.
     fn park_in_standby(&mut self) -> Result<()>;
+}
+
+/// One signed request on the device channel.
+#[derive(Debug, Clone, Copy)]
+pub struct DeviceRequest<'a> {
+    /// Path under the backend base URL, e.g. `/v1/events`.
+    pub path: &'a str,
+    /// `X-Device-Id` header.
+    pub device_id: &'a str,
+    /// `X-Guardian-Signature` header: HMAC of `body`, 64 hex digits.
+    pub signature: &'a str,
+    /// JSON body, sent exactly as signed.
+    pub body: &'a [u8],
+}
+
+/// Network access through the cellular modem.
+pub trait Uplink {
+    /// Current UTC time as kept by the network.
+    ///
+    /// # Errors
+    /// [`Error::State`](crate::Error::State) if the modem has no network time
+    /// yet, transport errors otherwise.
+    fn network_time(&mut self) -> Result<UtcTime>;
+
+    /// `POST` a signed request to the backend over HTTPS.
+    ///
+    /// Returns the HTTP status; any status is a successful exchange, judging
+    /// it is the caller's job.
+    ///
+    /// # Errors
+    /// [`Error::Timeout`](crate::Error::Timeout) or [`Error::Rejected`](crate::Error::Rejected) if no
+    /// HTTP status was obtained (no data bearer, TLS or DNS failure).
+    fn post(&mut self, request: &DeviceRequest<'_>) -> Result<u16>;
 }
 
 /// Identity of a detected sensor.

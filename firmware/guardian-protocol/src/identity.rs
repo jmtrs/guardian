@@ -156,6 +156,33 @@ impl fmt::Debug for ChannelKey {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Signature([u8; 32]);
 
+impl Signature {
+    /// The hex form as owned text, for an HTTP header without an allocator.
+    #[must_use]
+    pub fn hex(&self) -> SignatureHex {
+        const DIGITS: &[u8; 16] = b"0123456789abcdef";
+        let mut text = [0; 64];
+        for (pair, byte) in text.chunks_exact_mut(2).zip(self.0) {
+            pair[0] = DIGITS[usize::from(byte >> 4)];
+            pair[1] = DIGITS[usize::from(byte & 0x0f)];
+        }
+        SignatureHex(text)
+    }
+}
+
+/// 64 lowercase hex digits of a [`Signature`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SignatureHex([u8; 64]);
+
+impl SignatureHex {
+    /// The digits as text.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        // Only hex digits are ever stored.
+        core::str::from_utf8(&self.0).unwrap_or("")
+    }
+}
+
 impl fmt::Display for Signature {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.iter().try_for_each(|b| write!(f, "{b:02x}"))

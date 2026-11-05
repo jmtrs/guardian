@@ -7,8 +7,22 @@ use std::time::Duration;
 
 use guardian_core::accel::{Accel, Threshold};
 use guardian_core::bringup::Bringup;
-use guardian_core::ports::{Identity, Latch, Modem, MotionSensor, Platform, SensorInfo, WakeCause};
+use guardian_core::ports::{
+    DeviceRequest, Identity, Latch, Modem, MotionSensor, Platform, SensorInfo, Uplink, WakeCause,
+};
 use guardian_core::Error;
+use guardian_protocol::time::UtcTime;
+
+/// One request captured by the fake uplink. Read only by `tests/event.rs`;
+/// the other test binaries share this module.
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub struct Posted {
+    pub path: String,
+    pub device_id: String,
+    pub signature: String,
+    pub body: String,
+}
 
 /// Scriptable state behind all fakes.
 pub struct World {
@@ -38,6 +52,9 @@ pub struct World {
     pub ack_calls: u32,
     pub wake: WakeCause,
     pub battery: Option<u32>,
+    pub network_time: Result<UtcTime, Error>,
+    pub post_status: Result<u16, Error>,
+    pub posts: Vec<Posted>,
     pub slept: Duration,
     pub wake_arm_result: Result<(), Error>,
     pub deep_sleeps: u32,
@@ -73,6 +90,9 @@ impl Default for World {
             ack_calls: 0,
             wake: WakeCause::PowerOn,
             battery: Some(4100),
+            network_time: UtcTime::from_civil(2026, 11, 5, 11, 30, 0).map_err(|_| Error::State),
+            post_status: Ok(202),
+            posts: Vec::new(),
             slept: Duration::ZERO,
             wake_arm_result: Ok(()),
             deep_sleeps: 0,
@@ -102,6 +122,22 @@ impl Fake {
 
     pub fn printed(&self, needle: &str) -> bool {
         self.world().out.contains(needle)
+    }
+}
+
+impl Uplink for Fake {
+    fn network_time(&mut self) -> Result<UtcTime, Error> {
+        self.0.borrow().network_time
+    }
+    fn post(&mut self, request: &DeviceRequest<'_>) -> Result<u16, Error> {
+        let mut w = self.0.borrow_mut();
+        w.posts.push(Posted {
+            path: request.path.to_owned(),
+            device_id: request.device_id.to_owned(),
+            signature: request.signature.to_owned(),
+            body: String::from_utf8_lossy(request.body).into_owned(),
+        });
+        w.post_status
     }
 }
 
