@@ -66,14 +66,31 @@ desde la app. `secretHex` es `K_root`: grabar en la placa (NVS) o exportar al
 simulador; no se puede recuperar. El simulador apunta al homelab con
 `GUARDIAN_BASE=https://gtapi.aggc.dev`.
 
-Con firmware real, este paso lo hará la herramienta de flasheo del banco
-(crear dispositivo → grabar `deviceId`+`K_root` en NVS → imprimir pegatina del
-`claimCode`); el contrato es el mismo (§7 del contrato).
+Con el firmware Rust, `deviceId` + `K_root` se graban en la NVS de la placa con
+`!provision <deviceId> <secretHex>` por su consola (ver `firmware/README.md`).
+En fábrica lo hará una herramienta de flasheo (crear dispositivo → grabar NVS →
+imprimir la pegatina del `claimCode`); el contrato es el mismo (§7).
+
+**Reabrir el emparejamiento.** Si la ventana caduca antes de reclamar, no hay
+endpoint para un código nuevo (pendiente). Hoy se hace dentro del contenedor:
+generar un código con `generateClaimCode`, guardar su `hashClaimCode` en
+`claimCodeHash` y una nueva `pairingExpiresAt`, solo si `ownerId` es nulo.
+
+**Un dispositivo por cuenta en la app.** El formulario de reclamo solo aparece
+si la cuenta no tiene ninguno, y la app muestra el primero (pendiente).
 
 ## Notas de contrato
 
 - Los scripts de banco (`bench`, `drive-*`) y los tests se excluyen del build de
   producción (`tsconfig.build.json`).
 - La placa habla por HMAC (no OTP): funciona aunque el email no esté configurado.
-- HTTPS público lo da Cloudflare; el firmware debe validar el certificado
-  (contrato §3).
+- HTTPS público lo da Cloudflare; el firmware valida el certificado contra su
+  paquete de CA (contrato §3). Si Cloudflare cambia de CA, ver
+  `firmware/bringup/certs/README.md`.
+- Email: con `RESEND_API_KEY` y el remitente de pruebas
+  `onboarding@resend.dev`, Resend solo entrega al dueño de la cuenta de Resend.
+  Para cualquier usuario hay que verificar `aggc.dev` en Resend (registros DNS
+  en Cloudflare) y usar `EMAIL_FROM=Guardian <noreply@aggc.dev>`.
+- `TEMP_LOGIN_OTP_EMAIL` / `TEMP_LOGIN_OTP_CODE`: atajo de acceso con código
+  fijo **que no envía email**. Desactivado en producción el 2026-11-05 (ambas
+  vacías); no reactivar salvo emergencia y por tiempo limitado.

@@ -1,0 +1,35 @@
+[package]
+name = "guardian-power-bench"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.84"
+description = "Guardian power bench: ESP32-S3 reading an INA219 in series with the device battery (P1-P5)."
+license = "UNLICENSED"
+publish = false
+
+[[bin]]
+name = "guardian-power-bench"
+harness = false # no std test harness on the target; logic is tested in the host crates
+
+[dependencies]
+guardian-core = { path = "../guardian-core" }
+guardian-drivers = { path = "../guardian-drivers" }
+esp-idf-svc = { version = "0.53", default-features = false, features = ["std", "binstart", "native"] }
+esp-idf-sys = { version = "0.38", default-features = false, features = ["std", "native"] }
+
+[build-dependencies]
+embuild = "0.33.5"
+
+[profile.release]
+opt-level = "s"
+
+[profile.dev]
+debug = true   # symbols cost no flash
+opt-level = "z"
+
+[lints.rust]
+missing_docs = "deny"
+unsafe_code = "forbid"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }

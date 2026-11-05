@@ -1,0 +1,22 @@
+[package]
+name = "guardian-core"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.84"
+description = "Guardian device core: domain rules, hardware ports and bring-up use cases. no_std, hardware-agnostic."
+license = "UNLICENSED"
+publish = false
+
+[dependencies]
+guardian-protocol = { path = "../guardian-protocol" }
+
+[dev-dependencies]
+guardian-protocol = { path = "../guardian-protocol" }
+
+[lints.rust]
+missing_docs = "deny"
+unsafe_code = "forbid"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"

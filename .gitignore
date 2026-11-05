@@ -74,6 +74,8 @@ debug/
 
 # Apple
 *.pem
+# Public root CAs the firmware trusts (no private keys): see its README.
+!firmware/bringup/certs/guardian-ca.pem
 .mobileprovision
 *.xcodeproj/
 *.xcworkspace/

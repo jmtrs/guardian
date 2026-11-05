@@ -1,7 +1,7 @@
 # Guardian Makefile
 # Cross-platform: delegates to Node.js scripts for Windows compatibility
 
-.PHONY: help setup dev dev-backend dev-mobile test test-backend test-mobile build lint typecheck db-start db-stop db-migrate db-deploy db-studio db-generate deploy deploy-backend sync status clean sim-prod
+.PHONY: help setup dev dev-backend dev-mobile test test-backend test-mobile test-firmware build lint typecheck db-start db-stop db-migrate db-deploy db-studio db-generate deploy deploy-backend sync status clean sim-prod
 
 help:
 	@echo "Guardian - Available Commands"
@@ -17,6 +17,7 @@ help:
 	@echo "    make test           Run all tests"
 	@echo "    make test-backend   Run backend tests"
 	@echo "    make test-mobile    Run mobile tests"
+	@echo "    make test-firmware  Run firmware core + driver host tests"
 	@echo "    make lint           Lint all packages"
 	@echo "    make typecheck      Typecheck all packages"
 	@echo ""
@@ -57,13 +58,18 @@ dev-mobile:
 # Testing & Quality
 # ============================================
 
-test: test-backend test-mobile
+test: test-backend test-mobile test-firmware
 
 test-backend:
 	@pnpm run test:backend
 
 test-mobile:
 	@pnpm run test:mobile || true
+
+test-firmware:
+	@cd firmware/guardian-protocol && cargo test
+	@cd firmware/guardian-core && cargo test
+	@cd firmware/guardian-drivers && cargo test
 
 lint:
 	@pnpm run lint

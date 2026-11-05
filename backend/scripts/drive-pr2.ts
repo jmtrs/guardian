@@ -6,6 +6,7 @@
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { DevicesService } from '../src/devices/devices.service';
+import { RetentionService } from '../src/devices/retention.service';
 import { deriveKey, sign } from '../src/devices/protocol';
 
 function assert(cond: unknown, msg: string) {
@@ -47,7 +48,7 @@ function v2(
 async function main() {
   const prisma = new PrismaService();
   await prisma.$connect();
-  const svc = new DevicesService(prisma);
+  const svc = new DevicesService(prisma, new RetentionService(prisma));
 
   const user = await prisma.user.create({
     data: { id: randomUUID(), name: 'drive2', email: `${randomUUID()}@drive.test` },

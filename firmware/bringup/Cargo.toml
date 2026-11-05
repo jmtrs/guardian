@@ -1,0 +1,43 @@
+[package]
+name = "guardian-bringup"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.84"
+description = "Guardian bench bring-up for the LILYGO T-A7670E: ESP-IDF adapters + composition root."
+license = "UNLICENSED"
+publish = false
+
+[[bin]]
+name = "guardian-bringup"
+harness = false # no std test harness on the target; logic is tested in the host crates
+
+[dependencies]
+guardian-core = { path = "../guardian-core" }
+guardian-drivers = { path = "../guardian-drivers" }
+guardian-protocol = { path = "../guardian-protocol" }
+esp-idf-svc = { version = "0.53", default-features = false, features = ["std", "binstart", "native"] }
+log = "0.4"
+# Direct dependency so esp-idf-sys honours this crate's extra_components metadata.
+esp-idf-sys = { version = "0.38", default-features = false, features = ["std", "native"] }
+
+[build-dependencies]
+embuild = "0.33.5"
+
+[profile.release]
+opt-level = "s"
+
+[profile.dev]
+debug = true   # symbols cost no flash
+opt-level = "z"
+
+[lints.rust]
+missing_docs = "deny"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+undocumented_unsafe_blocks = "deny"
+
+# Extra ESP-IDF headers merged into esp_idf_sys bindings (esp_chip_info.h).
+[[package.metadata.esp-idf-sys.extra_components]]
+bindings_header = "src/bindings.h"

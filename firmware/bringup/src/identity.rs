@@ -1,0 +1,26 @@
+//! Fallback device identity for the bench, injected at build time.
+//!
+//! The device normally reads its identity from NVS, written once with
+//! `!provision` (see [`Store`](crate::store::Store)). When NVS holds none,
+//! `GUARDIAN_DEVICE_ID` and `GUARDIAN_DEVICE_SECRET_HEX` from the build
+//! environment are used, compiled into this binary (which never enters git).
+//! Without either, `!event` explains how to provide one.
+
+use guardian_core::bringup::DeviceIdentity;
+use guardian_protocol::identity::{DeviceId, RootSecret};
+use guardian_protocol::ProtocolError;
+
+/// Backend base URL, overridable at build time (`GUARDIAN_BACKEND_URL`).
+pub const BACKEND_URL: &str = match option_env!("GUARDIAN_BACKEND_URL") {
+    Some(url) => url,
+    None => "https://gtapi.aggc.dev",
+};
+
+/// The identity compiled in, if any; `Err` if it is present but malformed.
+pub fn from_build() -> Option<Result<DeviceIdentity, ProtocolError>> {
+    let id = option_env!("GUARDIAN_DEVICE_ID")?;
+    let secret = option_env!("GUARDIAN_DEVICE_SECRET_HEX")?;
+    Some(DeviceId::new(id).and_then(|device| {
+        RootSecret::from_hex(secret).map(|root| DeviceIdentity::new(device, &root))
+    }))
+}

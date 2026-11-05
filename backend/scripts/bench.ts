@@ -35,6 +35,7 @@
  */
 import { PrismaService } from '../src/prisma/prisma.service';
 import { DevicesService } from '../src/devices/devices.service';
+import { RetentionService } from '../src/devices/retention.service';
 import { sign, deriveKey } from '../src/devices/protocol';
 import { decryptSecret } from '../src/devices/secret-crypto';
 
@@ -57,7 +58,7 @@ async function main() {
       // email aqui es el nombre del dispositivo. Imprime secret + claimCode una
       // vez; el dueño lo reclama con `bench claim <email> <code>` (o desde app).
       const name = process.argv[3] ?? 'Vehiculo';
-      const svc = new DevicesService(prisma);
+      const svc = new DevicesService(prisma, new RetentionService(prisma));
       const { device, secret, claimCode } = await svc.createDevice(name);
       console.log('Dispositivo aprovisionado (sin dueño, en ventana de pairing).');
       console.log(`  deviceId:  ${device.id}`);
@@ -71,7 +72,7 @@ async function main() {
       // arg = code (argv[4]); email = argv[3]. Liga el dispositivo al dueño.
       const user = await prisma.user.findUnique({ where: { email } });
       if (!user) throw new Error(`No hay usuario con email ${email}. Inicia sesion en la app primero.`);
-      const svc = new DevicesService(prisma);
+      const svc = new DevicesService(prisma, new RetentionService(prisma));
       const device = await svc.claimDevice(arg, user.id);
       console.log(`Reclamado: ${device.id} -> ${email}`);
       return;
@@ -134,7 +135,7 @@ async function main() {
     if (cmd === 'locate') {
       const { user, device } = await firstDevice(prisma, email);
       if (!device) throw new Error('El usuario no tiene dispositivo. Ejecuta provision primero.');
-      const svc = new DevicesService(prisma);
+      const svc = new DevicesService(prisma, new RetentionService(prisma));
       const command = await svc.requestLocate(device.id, user.id);
       console.log(`locate -> ${command.id} status=${command.status} expiresAt=${command.expiresAt.toISOString()}`);
       return;

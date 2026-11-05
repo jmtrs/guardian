@@ -6,6 +6,7 @@
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { DevicesService } from '../src/devices/devices.service';
+import { RetentionService } from '../src/devices/retention.service';
 
 function assert(cond: unknown, msg: string) {
   if (!cond) throw new Error(`FAIL: ${msg}`);
@@ -35,7 +36,7 @@ function envelope(
 async function main() {
   const prisma = new PrismaService();
   await prisma.$connect();
-  const svc = new DevicesService(prisma);
+  const svc = new DevicesService(prisma, new RetentionService(prisma));
 
   // Usuario + dispositivo desechables.
   const user = await prisma.user.create({
