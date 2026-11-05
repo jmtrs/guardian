@@ -63,6 +63,8 @@ jobs:
         include:
           - crate: bringup
             chip: esp32
+          - crate: production
+            chip: esp32
           - crate: power-bench
             chip: esp32s3
     defaults:
@@ -80,9 +82,14 @@ jobs:
           path: |
             ~/.espressif
             firmware/${{ matrix.crate }}/target
-          key: ${{ matrix.chip }}-${{ hashFiles('firmware/**/Cargo.toml', format('firmware/{0}/sdkconfig.defaults', matrix.crate)) }}
+          key: ${{ matrix.chip }}-${{ hashFiles('firmware/**/Cargo.toml', format('firmware/{0}/sdkconfig.defaults', matrix.crate), format('firmware/{0}/partitions.csv', matrix.crate)) }}
       - run: cargo clippy --release -- -D warnings
       - run: cargo build --release
+      - name: Validate production partition table
+        if: matrix.crate == 'production'
+        run: |
+          python "$HOME/.espressif/esp-idf/v5.4.2/components/partition_table/gen_esp32part.py" partitions.csv /tmp/guardian-partitions.bin
+          cmp /tmp/guardian-partitions.bin target/xtensa-esp32-espidf/release/partition-table.bin
 
   backend:
     name: Backend (NestJS)

@@ -31,7 +31,7 @@ fn sends_a_heartbeat_signed_over_the_exact_body() {
     assert_eq!(post.device_id, ID);
     assert_eq!(
         post.body,
-        r#"{"schemaVersion":2,"deviceId":"dev-test-1","sequence":1793878200,"kind":"heartbeat","observedAtUtc":"2026-11-05T11:30:00Z","power":{"vehicleMv":0,"source":"reserve","reserveMv":4100}}"#
+        r#"{"schemaVersion":2,"deviceId":"dev-test-1","sequence":1,"kind":"heartbeat","observedAtUtc":"2026-11-05T11:30:00Z","power":{"vehicleMv":0,"source":"reserve","reserveMv":4100}}"#
     );
     let key = RootSecret::from_hex(ROOT)
         .unwrap()

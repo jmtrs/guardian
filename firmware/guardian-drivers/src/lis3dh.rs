@@ -183,7 +183,9 @@ impl<I: I2c, P: InputPin, D: DelayNs> MotionSensor for Lis3dh<I, P, D> {
         Lis3dh::read(self, reg::REFERENCE, &mut reference)?; // resets the HP filter
         self.write(reg::INT1_CFG, val::INT1_CFG_XYZ_HIGH)?;
         self.delay(FILTER_SETTLE);
-        self.acknowledge().map(|_| ()) // drop events latched while settling
+        // Do not read INT1_SRC here: motion during settling must remain
+        // latched until the application has made that observation durable.
+        Ok(())
     }
 
     /// A pin read error counts as triggered: fail-safe, it blocks deep sleep.

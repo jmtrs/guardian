@@ -13,10 +13,13 @@ harness = false # no std test harness on the target; logic is tested in the host
 
 [dependencies]
 guardian-core = { path = "../guardian-core" }
+guardian-device = { path = "../guardian-device" }
 guardian-drivers = { path = "../guardian-drivers" }
+guardian-esp32 = { path = "../guardian-esp32" }
 guardian-protocol = { path = "../guardian-protocol" }
 esp-idf-svc = { version = "0.53", default-features = false, features = ["std", "binstart", "native"] }
 log = "0.4"
+zeroize = { version = "1.8", default-features = false }
 # Direct dependency so esp-idf-sys honours this crate's extra_components metadata.
 esp-idf-sys = { version = "0.38", default-features = false, features = ["std", "native"] }
 

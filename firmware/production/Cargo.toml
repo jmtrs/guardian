@@ -1,0 +1,41 @@
+[package]
+name = "guardian-production"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.84"
+description = "Guardian production wake-cycle firmware for the LILYGO T-A7670E."
+license = "UNLICENSED"
+publish = false
+
+[[bin]]
+name = "guardian-production"
+harness = false
+
+[dependencies]
+guardian-core = { path = "../guardian-core" }
+guardian-device = { path = "../guardian-device" }
+guardian-drivers = { path = "../guardian-drivers" }
+guardian-esp32 = { path = "../guardian-esp32" }
+guardian-protocol = { path = "../guardian-protocol" }
+esp-idf-svc = { version = "0.53", default-features = false, features = ["std", "binstart", "native"] }
+log = "0.4"
+esp-idf-sys = { version = "0.38", default-features = false, features = ["std", "native"] }
+zeroize = { version = "1.8", default-features = false }
+
+[build-dependencies]
+embuild = "0.33.5"
+
+[profile.release]
+opt-level = "s"
+
+[profile.dev]
+debug = true
+opt-level = "z"
+
+[lints.rust]
+missing_docs = "deny"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+undocumented_unsafe_blocks = "deny"

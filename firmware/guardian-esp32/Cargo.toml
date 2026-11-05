@@ -1,0 +1,23 @@
+[package]
+name = "guardian-esp32"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.84"
+description = "Shared ESP-IDF adapters for the Guardian LILYGO T-A7670E board."
+license = "UNLICENSED"
+publish = false
+
+[dependencies]
+guardian-core = { path = "../guardian-core" }
+guardian-drivers = { path = "../guardian-drivers" }
+guardian-protocol = { path = "../guardian-protocol" }
+esp-idf-svc = { version = "0.53", default-features = false, features = ["std", "native"] }
+log = "0.4"
+
+[lints.rust]
+missing_docs = "deny"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+undocumented_unsafe_blocks = "deny"

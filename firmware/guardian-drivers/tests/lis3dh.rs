@@ -107,7 +107,6 @@ fn arm_writes_an3308_wakeup_recipe() {
         I2c::write(0x18, vec![0x33, 0x00]),
         I2c::write_read(0x18, vec![0x26], vec![0]),
         I2c::write(0x18, vec![0x30, 0x2A]),
-        I2c::write_read(0x18, vec![0x31], vec![0x00]),
     ]);
     run(&t, &[], |s| {
         s.probe().unwrap();

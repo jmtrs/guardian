@@ -1,15 +1,13 @@
 //! # Guardian bring-up — composition root
 //!
-//! Bench tool for the LILYGO T-A7670E. Builds every adapter from the [`board`]
-//! roles, injects them into [`guardian_core::bringup::Bringup`] and runs the
+//! Bench tool for the LILYGO T-A7670E. Builds every adapter from the
+//! [`guardian_esp32::board`] roles, injects them into
+//! [`guardian_core::bringup::Bringup`] and runs the
 //! console loop. No logic lives here: domain rules and use cases are in
 //! `guardian-core`, drivers in `guardian-drivers`, both tested on the host.
 
-mod board;
 mod console;
-mod hold;
 mod identity;
-mod modem;
 mod platform;
 mod store;
 mod wiring;
@@ -27,10 +25,10 @@ use esp_idf_svc::nvs::EspDefaultNvsPartition;
 use esp_idf_svc::sys::EspError;
 use guardian_core::bringup::Bringup;
 use guardian_drivers::lis3dh::Lis3dh;
+use guardian_esp32::board::{self, Board};
+use guardian_esp32::modem::{ModemPins, A7670};
 
-use board::Board;
 use console::{Console, Stdout};
-use modem::{ModemPins, A7670};
 use platform::Esp32Platform;
 
 fn main() -> Result<(), EspError> {

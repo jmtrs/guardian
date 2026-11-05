@@ -79,7 +79,7 @@ user-agent:            Guardian-Device/2
 - Banco local: `http://localhost:3000` (o el host del backend). Fuera de
   localhost, HTTPS con verificación completa del certificado: el firmware trae
   su paquete de CA y nunca acepta cualquier certificado. **Implementado** en el
-  firmware Rust (`firmware/bringup/certs/`, `authmode 1`), validado en la
+  firmware Rust (`firmware/guardian-esp32/certs/`, `authmode 1`), validado en la
   unidad 1 contra `gtapi.aggc.dev` y rechazando un certificado autofirmado.
 
 El dispositivo solo habla dos endpoints:
@@ -174,10 +174,9 @@ mayor", así que los huecos son válidos:
 - Reintentar un evento es reenviar **los mismos bytes con la misma secuencia**;
   `202` o `409` cierran ese envío (`409` = ya entró o es viejo).
 - Tras reiniciarse, continúa desde el último valor guardado (+1). Nunca vuelve
-  a 0. Un dispositivo recién aprovisionado empieza en los segundos UTC
-  actuales, por encima de cualquier secuencia que pudiera haber usado antes ese
-  `deviceId`. Volver a aprovisionar el mismo `deviceId` conserva el contador;
-  solo un `deviceId` distinto lo reinicia.
+  a 0. Una identidad de dispositivo nueva empieza en `1`; el reloj de red no
+  participa en el contador anti-replay. Volver a aprovisionar el mismo
+  `deviceId` conserva el contador; solo un `deviceId` distinto lo reinicia.
 
 El simulador Python avanza solo tras un 202: le basta, porque no reintenta.
 

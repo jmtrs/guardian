@@ -10,8 +10,8 @@ use esp_idf_svc::hal::gpio::PinId;
 use esp_idf_svc::sys;
 use guardian_core::ports::{Identity, Platform, WakeCause};
 use guardian_core::Error;
+use guardian_esp32::hold;
 
-use crate::hold;
 use crate::store::Store;
 
 /// Samples averaged per battery reading.
@@ -35,7 +35,7 @@ pub struct Esp32Platform<C: AdcChannel> {
 
 impl<C: AdcChannel> Esp32Platform<C> {
     /// Build the adapter. Pad holds from a previous sleep are released by
-    /// [`Board::take`](crate::board::Board::take), not here.
+    /// [`Board::take`](guardian_esp32::board::Board::take), not here.
     #[must_use]
     pub fn new(
         battery: BatteryChannel<C>,

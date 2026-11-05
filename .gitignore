@@ -75,7 +75,7 @@ debug/
 # Apple
 *.pem
 # Public root CAs the firmware trusts (no private keys): see its README.
-!firmware/bringup/certs/guardian-ca.pem
+!firmware/guardian-esp32/certs/guardian-ca.pem
 .mobileprovision
 *.xcodeproj/
 *.xcworkspace/
@@ -85,3 +85,6 @@ __pycache__/
 guardian-counter.sqlite3
 # Contador de secuencia local del simulador de dispositivo (analogo a NVS).
 .guardian_seq_*.json
+
+# Per-crate Rust build output.
+firmware/*/target/

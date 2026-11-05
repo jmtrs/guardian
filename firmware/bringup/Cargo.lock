@@ -767,15 +767,26 @@ dependencies = [
  "esp-idf-svc",
  "esp-idf-sys",
  "guardian-core",
+ "guardian-device",
  "guardian-drivers",
+ "guardian-esp32",
  "guardian-protocol",
  "log",
+ "zeroize",
 ]
 
 [[package]]
 name = "guardian-core"
 version = "0.1.0"
 dependencies = [
+ "guardian-protocol",
+]
+
+[[package]]
+name = "guardian-device"
+version = "0.1.0"
+dependencies = [
+ "guardian-core",
  "guardian-protocol",
 ]
 
@@ -789,12 +800,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "guardian-esp32"
+version = "0.1.0"
+dependencies = [
+ "esp-idf-svc",
+ "guardian-core",
+ "guardian-drivers",
+ "guardian-protocol",
+ "log",
+]
+
+[[package]]
 name = "guardian-protocol"
 version = "0.1.0"
 dependencies = [
  "hkdf",
  "hmac",
  "sha2",
+ "zeroize",
 ]
 
 [[package]]
@@ -1810,6 +1833,12 @@ checksum = "23b97319f7b8343df12cc98938e5c3eb436064524c8d2b4e30a1d3a36eecdf81"
 dependencies = [
  "memchr",
 ]
+
+[[package]]
+name = "zeroize"
+version = "1.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e13084392c5e4bc371903e2935a5eaeed24905a7511356b883835e18a78f6879"
 
 [[package]]
 name = "zmij"

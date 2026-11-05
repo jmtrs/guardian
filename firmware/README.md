@@ -1,14 +1,13 @@
 # Guardian firmware (Rust)
 
 Firmware de la **LILYGO T-A7670E (ESP32 + SIMCom A7670E)** en Rust, sobre
-ESP-IDF v5.4.2 (`esp-idf-svc`). La pieza actual es la herramienta de banco
-**bring-up**: cubre los pasos 1–7 de
+ESP-IDF v5.4.2 (`esp-idf-svc`). La herramienta de banco **bring-up** cubre los pasos 1–7 de
 [COMPONENTES.md](../docs/COMPONENTES.md#primera-secuencia-al-recibir-las-piezas),
 validados en la unidad 1, incluido el primer evento firmado v2 aceptado por el
 backend de producción. El **banco de consumo** (`power-bench`, un ESP32-S3 que
-lee un INA219) midió P1, P2b y P3. `guardian-device` contiene ya el primer
-dominio productivo: outbox persistente y orden estricto del ciclo, sin adapters
-de placa todavía.
+lee un INA219) midió P1, P2b y P3. `production` contiene ya el primer candidato
+ESP-IDF: movimiento durable, outbox NVS con CRC, reintento firmado exacto y
+deep sleep por movimiento/timer.
 
 Estado global y lista de pendientes: [docs/ESTADO_Y_PENDIENTES.md](../docs/ESTADO_Y_PENDIENTES.md).
 Registro de cada prueba en la placa: [docs/hardware/BRINGUP_LOG.md](../docs/hardware/BRINGUP_LOG.md).
@@ -19,7 +18,7 @@ Registro de cada prueba en la placa: [docs/hardware/BRINGUP_LOG.md](../docs/hard
 |---|---|---|
 | Protocolo v2, dominio, casos de uso | Rust `no_std`, sin `unsafe` | Seguridad de memoria y tipos donde viven los secretos y el contrato. Cripto de `RustCrypto`, nada escrito a mano. Tests con `cargo test` en el Mac. |
 | Drivers (LIS3DH, INA219, framing AT, respuestas SIMCom) | Rust `no_std` sobre `embedded-hal` 1.0 | Independientes de la HAL. Se testean con mocks de I²C/GPIO. |
-| Adapters de placa | Rust `std` sobre `esp-idf-hal` | Drivers ESP-IDF probados (UART, I²C, ADC calibrado, NVS, deep sleep). El `unsafe` queda confinado a `hold.rs`, `platform.rs`, `wiring.rs` y `modem/transport.rs`, con `SAFETY` documentado. |
+| Adapters de placa | Rust `std` sobre `esp-idf-hal` | Drivers ESP-IDF probados (UART, I²C, ADC calibrado, NVS, deep sleep). El `unsafe` queda confinado y documentado con `SAFETY`. |
 | Sistema (RTOS, drivers, sleep) | C de ESP-IDF | Lo da Espressif. No se reescribe. |
 
 ## Arquitectura (hexagonal)
@@ -42,17 +41,26 @@ Registro de cada prueba en la placa: [docs/hardware/BRINGUP_LOG.md](../docs/hard
          ▲ usa
  guardian-device (no_std, forbid(unsafe))
  ├── outbox.rs    bytes+seq persistidos antes de red; reintento exacto hasta 202/409
+ ├── record.rs    blob versionado + CRC para persistencia atómica
+ ├── motion.rs    defer antes de ACK; produce al quedar libre el slot
  ├── cycle.rs     boot/wake → outbox → motion → commands → GNSS/HB → sleep
  └── ports.rs     storage, reloj, energía, posición, comandos y wake timer
           ▲ usan
- bringup (xtensa-esp32-espidf, std)
+ guardian-esp32 (xtensa-esp32-espidf, std)
  ├── board.rs     ÚNICO sitio con pines físicos → roles
- ├── modem/       A7670: potencia + AtTransport (hilo lector, Condvar)
+ ├── modem/       A7670: potencia, UART AT, NTP y HTTPS verificado
+ └── hold.rs      hold de pads en deep sleep
+          ▲ usan
+ bringup (xtensa-esp32-espidf, std)
  ├── platform.rs  identidad, ADC batería, ext0 wake, deep sleep
- ├── hold.rs      hold de pads en deep sleep
  ├── wiring.rs    niveles SDA/SCL antes del I²C: ¿llega cada cable?
  ├── console.rs   consola UART0 + Stdout: fmt::Write
  └── main.rs      composition root: cablea y entra en el bucle
+ production (xtensa-esp32-espidf, std)
+ ├── store.rs     identidad estricta + outbox/motion/sequence en NVS
+ ├── power.rs     telemetría de reserva por ADC calibrado
+ ├── wake.rs      ext0 + timer + deep sleep
+ └── main.rs      composition root productivo separado
  power-bench (xtensa-esp32s3-espidf, std)
  ├── link.rs      puente USB ⇄ consola de la LILYGO (UART1, GPIO17/18), comandos `~`
  └── main.rs      composition root: I²C GPIO8/9 → Ina219 → PowerWindow → USB
@@ -61,13 +69,13 @@ Registro de cada prueba en la placa: [docs/hardware/BRINGUP_LOG.md](../docs/hard
 Reglas:
 - `guardian-protocol` solo depende de `RustCrypto`; `guardian-core`, solo de `guardian-protocol`.
 - `guardian-drivers` depende solo del core y de `embedded-hal`.
-- Solo `bringup` y `power-bench` conocen ESP-IDF; falta el composition root productivo.
-- Ningún archivo pasa de 300 líneas. `missing_docs = "deny"` y clippy `pedantic` en todos los crates.
+- Solo `guardian-esp32`, `bringup`, `production` y `power-bench` conocen ESP-IDF.
+- Los módulos productivos se mantienen por debajo de 300 líneas. `missing_docs = "deny"` y clippy `pedantic` en todos los crates.
 
 ## Tests (sin placa)
 
 ```bash
-make test-firmware          # protocol (12) + core (60) + drivers (29) + device (10)
+make test-firmware          # protocol (12) + core (60) + drivers (29) + device (30)
 ```
 
 Los drivers verifican el tráfico I²C exacto: la receta de interrupción AN3308,
@@ -76,8 +84,8 @@ LIS3DSH.
 
 CI:
 - `firmware-host`: fmt, clippy, test y docs de protocol, core, drivers y device.
-- `firmware-esp32`: clippy y build de `bringup` (`xtensa-esp32-espidf`) y
-  `power-bench` (`xtensa-esp32s3-espidf`).
+- `firmware-esp32`: clippy y build de `bringup` y `production`
+  (`xtensa-esp32-espidf`) y `power-bench` (`xtensa-esp32s3-espidf`).
 - `firmware-security-template`: gate de configuración solo lectura; no flashea
   ni quema eFuses. Ver [`production/README.md`](production/README.md).
 
@@ -170,10 +178,10 @@ cargo run --release
 **Envío.** `!event` sincroniza la hora por NTP (`AT+CNTP`: Orange no manda
 NITZ y el reloj del módem retoma horas viejas tras un apagado), reserva la
 siguiente secuencia **guardándola en NVS antes de enviar** (un fallo solo deja
-un hueco, nunca repite; un dispositivo nuevo arranca desde los segundos UTC),
+un hueco, nunca repite; un dispositivo nuevo arranca en 1),
 firma con `K_event` y envía por `AT+HTTP*` con SNI, una cabecera por
 `USERDATA` y el certificado del servidor **verificado** contra
-[`certs/guardian-ca.pem`](bringup/certs/README.md) (`authmode 1`).
+[`guardian-esp32/certs/guardian-ca.pem`](guardian-esp32/certs/README.md) (`authmode 1`).
 
 **Pendiente de producción:** la NVS no está cifrada (el `K_root` está en flash
 en claro): flash encryption + NVS encryption + secure boot antes de fabricar.
@@ -219,7 +227,7 @@ de ~2 A: con 0,6 Ω de dupont y protoboard (medido en la unidad 1) caen más de
 
 ## Comportamiento y supuestos
 
-- **Pines**: tomados de `LILYGO_T_A7670` en el `utilities.h` oficial (`bringup/src/board.rs`).
+- **Pines**: tomados de `LILYGO_T_A7670` en el `utilities.h` oficial (`guardian-esp32/src/board.rs`).
   Verificados en la unidad 1: módem (potencia, UART, DTR), LIS3DH en IO21/IO22/IO34,
   ADC de batería y consola UART0 en los pines `UART_TX`/`UART_RX` del header.
 - **Divisor VBAT ×2** (`BATTERY_DIVIDER_X1000`): lee un ~2 % alto frente al INA219

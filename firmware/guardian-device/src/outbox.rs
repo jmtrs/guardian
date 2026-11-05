@@ -11,18 +11,35 @@ pub struct PendingEvent {
     bytes: [u8; MAX_BODY],
     len: usize,
     sequence: u32,
+    motion_generation: Option<u32>,
 }
 
 impl PendingEvent {
     /// Copy a freshly encoded body into the durable record shape.
     #[must_use]
     pub fn from_body(body: &Body) -> Self {
+        Self::from_body_with_motion(body, None)
+    }
+
+    /// Copy a movement body that satisfies one durable motion generation.
+    ///
+    /// # Errors
+    /// [`Error::State`] for generation zero.
+    pub fn from_deferred_motion(body: &Body, generation: u32) -> Result<Self> {
+        if generation == 0 {
+            return Err(Error::State);
+        }
+        Ok(Self::from_body_with_motion(body, Some(generation)))
+    }
+
+    fn from_body_with_motion(body: &Body, motion_generation: Option<u32>) -> Self {
         let mut bytes = [0; MAX_BODY];
         bytes[..body.as_bytes().len()].copy_from_slice(body.as_bytes());
         Self {
             bytes,
             len: body.as_bytes().len(),
             sequence: body.sequence(),
+            motion_generation,
         }
     }
 
@@ -33,6 +50,25 @@ impl PendingEvent {
     /// # Errors
     /// [`Error::State`] for an empty/oversized body or invalid sequence.
     pub fn restore(sequence: u32, body: &[u8]) -> Result<Self> {
+        Self::restore_with_motion(sequence, body, None)
+    }
+
+    /// Restore a record that also satisfies deferred motion.
+    ///
+    /// # Errors
+    /// The same validation failures as [`restore`](Self::restore).
+    pub fn restore_deferred_motion(sequence: u32, body: &[u8], generation: u32) -> Result<Self> {
+        if generation == 0 {
+            return Err(Error::State);
+        }
+        Self::restore_with_motion(sequence, body, Some(generation))
+    }
+
+    fn restore_with_motion(
+        sequence: u32,
+        body: &[u8],
+        motion_generation: Option<u32>,
+    ) -> Result<Self> {
         if sequence == 0 || sequence >= SEQUENCE_LIMIT || body.is_empty() || body.len() > MAX_BODY {
             return Err(Error::State);
         }
@@ -42,6 +78,7 @@ impl PendingEvent {
             bytes,
             len: body.len(),
             sequence,
+            motion_generation,
         })
     }
 
@@ -55,6 +92,12 @@ impl PendingEvent {
     #[must_use]
     pub const fn sequence(&self) -> u32 {
         self.sequence
+    }
+
+    /// Motion generation this record satisfies on terminal delivery.
+    #[must_use]
+    pub const fn deferred_motion_generation(&self) -> Option<u32> {
+        self.motion_generation
     }
 }
 
@@ -89,6 +132,27 @@ pub enum DrainOutcome {
 /// [`Error::State`] if a prior event is pending or the sequence does not
 /// advance, plus storage errors from the adapter.
 pub fn stage<S: EventStore>(store: &mut S, body: &Body) -> Result<PendingEvent> {
+    stage_event(store, body, None)
+}
+
+/// Persist a movement event that consumes its deferred-motion generation only
+/// after terminal delivery.
+///
+/// # Errors
+/// The same storage and sequence failures as [`stage`].
+pub fn stage_deferred_motion<S: EventStore>(
+    store: &mut S,
+    body: &Body,
+    generation: u32,
+) -> Result<PendingEvent> {
+    stage_event(store, body, Some(generation))
+}
+
+fn stage_event<S: EventStore>(
+    store: &mut S,
+    body: &Body,
+    motion_generation: Option<u32>,
+) -> Result<PendingEvent> {
     if store.load_pending()?.is_some()
         || store
             .last_sequence()?
@@ -96,7 +160,11 @@ pub fn stage<S: EventStore>(store: &mut S, body: &Body) -> Result<PendingEvent> 
     {
         return Err(Error::State);
     }
-    let event = PendingEvent::from_body(body);
+    let event = if let Some(generation) = motion_generation {
+        PendingEvent::from_deferred_motion(body, generation)?
+    } else {
+        PendingEvent::from_body(body)
+    };
     store.save_pending(&event)?;
     Ok(event)
 }
@@ -119,6 +187,9 @@ pub fn drain<S: EventStore, U: EventUplink>(store: &mut S, uplink: &mut U) -> Re
         _ => return Ok(DrainOutcome::Retained),
     };
     store.commit_sequence(event.sequence())?;
+    if let Some(generation) = event.deferred_motion_generation() {
+        store.clear_deferred_motion(generation)?;
+    }
     store.clear_pending()?;
     Ok(DrainOutcome::Delivered {
         sequence: event.sequence(),
