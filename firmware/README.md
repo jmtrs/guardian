@@ -137,7 +137,7 @@ sensor pierde alimentación, la línea flota: la placa despierta en bucle o
 | `!standby [mg]` | P2 | módem registrado en su sleep LTE (`AT+CSCLK=1`, DTR alto retenido), deep sleep, despertar por movimiento. Registrar antes (`!diag`) |
 | `!vbat` | — | rail de batería |
 | `!event` | 7 | firma un `heartbeat` v2 y lo envía por LTE (HTTPS del módem) a `/v1/events`; imprime el estado HTTP |
-| `!provision <id> <secret>` | 7 | guarda la identidad en NVS (y reinicia la secuencia de esa identidad) |
+| `!provision <id> <secret>` | 7 | guarda la identidad en NVS. Si cambia el `deviceId`, la secuencia vuelve a empezar; con el mismo, sigue contando |
 | `!modem on\|off` | — | secuencia de potencia del módem |
 | `AT...` | — | cualquier línea sin `!` va tal cual al módem |
 

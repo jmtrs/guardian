@@ -96,3 +96,27 @@ fn provision_refuses_invalid_input_without_storing() {
     assert_eq!(fake.world().stored_identity, None);
     assert!(fake.printed("provision refused"));
 }
+
+#[test]
+fn reprovisioning_the_same_device_keeps_counting() {
+    let fake = Fake::default();
+    let mut s = fake.service();
+    s.handle_line(&format!("!provision dev-test-1 {ROOT}"));
+    assert_eq!(s.send_heartbeat(), Ok(202));
+    s.handle_line(&format!("!provision dev-test-1 {ROOT}"));
+    assert_eq!(s.send_heartbeat(), Ok(202));
+    let w = fake.world();
+    assert_eq!(w.stored_sequences[1].0, w.stored_sequences[0].0 + 1);
+}
+
+#[test]
+fn provisioning_another_device_restarts_from_the_clock() {
+    let fake = Fake::with(|w| {
+        w.stored_identity = Some(("old-device".to_owned(), ROOT.to_owned()));
+        w.last_sequence = Ok(Some(5));
+    });
+    let mut s = fake.service();
+    s.handle_line(&format!("!provision dev-test-1 {ROOT}"));
+    assert_eq!(s.send_heartbeat(), Ok(202));
+    assert_eq!(fake.world().stored_sequences[0].0, 1_793_878_200);
+}

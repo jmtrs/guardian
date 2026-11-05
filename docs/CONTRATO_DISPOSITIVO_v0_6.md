@@ -176,8 +176,8 @@ mayor", así que los huecos son válidos:
 - Tras reiniciarse, continúa desde el último valor guardado (+1). Nunca vuelve
   a 0. Un dispositivo recién aprovisionado empieza en los segundos UTC
   actuales, por encima de cualquier secuencia que pudiera haber usado antes ese
-  `deviceId`. Volver a aprovisionar la misma identidad reinicia ese punto de
-  partida.
+  `deviceId`. Volver a aprovisionar el mismo `deviceId` conserva el contador;
+  solo un `deviceId` distinto lo reinicia.
 
 El simulador Python avanza solo tras un 202: le basta, porque no reintenta.
 

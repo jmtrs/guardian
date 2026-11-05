@@ -214,9 +214,11 @@ pub trait Platform {
     /// Storage write failure: the event must not be sent.
     fn store_sequence(&mut self, sequence: u32) -> Result<()>;
 
-    /// Durably store the device identity (factory provisioning) and forget
-    /// the sequence of any previous identity. The secret is already
-    /// validated; adapters must never log it.
+    /// Durably store the device identity (factory provisioning). The
+    /// sequence restarts only if the device id changes: the same device must
+    /// never go back below a sequence it used. On a failed write no partial
+    /// identity may remain. The secret is already validated; adapters must
+    /// never log it.
     ///
     /// # Errors
     /// Storage write failure.

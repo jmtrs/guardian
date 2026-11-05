@@ -253,8 +253,14 @@ impl Platform for Fake {
     }
     fn store_identity(&mut self, device_id: &str, root_secret_hex: &str) -> Result<(), Error> {
         let mut w = self.0.borrow_mut();
+        let same_device = w
+            .stored_identity
+            .as_ref()
+            .is_some_and(|(id, _)| id == device_id);
+        if !same_device {
+            w.last_sequence = Ok(None);
+        }
         w.stored_identity = Some((device_id.to_owned(), root_secret_hex.to_owned()));
-        w.last_sequence = Ok(None);
         Ok(())
     }
     fn deep_sleep(&mut self) {

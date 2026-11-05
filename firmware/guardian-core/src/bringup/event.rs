@@ -53,10 +53,7 @@ impl<M: Modem + Uplink, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P,
             .store_identity(device_id, secret_hex)
             .inspect_err(|e| say!(self, "identity not stored: {e}"))?;
         self.identity = Some(DeviceIdentity::new(device, &root));
-        say!(
-            self,
-            "identity stored for device {device_id}; sequence restarts"
-        );
+        say!(self, "identity stored for device {device_id}");
         Ok(())
     }
 

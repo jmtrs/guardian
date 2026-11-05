@@ -18,10 +18,10 @@ const UPLOAD_WINDOW_MS: u32 = 10_000;
 const UPLOAD_TIMEOUT: Duration = Duration::from_secs(12);
 /// Connect + TLS + request + response, as the modem reports it.
 const ACTION_WAIT: Duration = Duration::from_secs(60);
-/// NTP server for the modem clock. Plain NTP is unauthenticated: it only
-/// feeds `observedAtUtc`, and the bench sequence (UTC seconds) is checked
-/// against replay by the backend, which accepts only increasing values.
-const NTP_SERVER: &str = "pool.ntp.org";
+/// NTP servers for the modem clock, tried in order. Plain NTP is
+/// unauthenticated: the time feeds `observedAtUtc`, certificate date checks
+/// and the first sequence seed only; later sequences come from NVS.
+const NTP_SERVERS: [&str; 3] = ["pool.ntp.org", "time.cloudflare.com", "time.google.com"];
 const NTP_WAIT: Duration = Duration::from_secs(20);
 /// Device-channel user agent: Cloudflare blocks unknown or empty ones.
 const USER_AGENT: &str = "Guardian-Device/2";
@@ -33,13 +33,19 @@ impl Uplink for A7670 {
         // plausible-looking time instead of its 1970 default, so a parsable
         // `+CCLK` proves nothing. A stale clock made the bench sequence go
         // backwards (409 replay). NTP over the data bearer sets UTC (zone 0).
-        self.command(&format!(r#"AT+CNTP="{NTP_SERVER}",0"#), SHORT)?;
-        let result = self.at.query("AT+CNTP", "+CNTP:", SHORT, NTP_WAIT)?;
-        if result.trim_end() != "+CNTP: 0" {
-            log::warn!("NTP sync failed: {result}");
-            return Err(Error::Rejected);
+        // `+CNTP: 6` (no answer in time) happened on unit 1 right after
+        // registration: try the next server instead of failing the event.
+        for server in NTP_SERVERS {
+            self.command(&format!(r#"AT+CNTP="{server}",0"#), SHORT)?;
+            match self.at.query("AT+CNTP", "+CNTP:", SHORT, NTP_WAIT) {
+                Ok(result) if result.trim_end() == "+CNTP: 0" => {
+                    return self.read_clock()?.ok_or(Error::State);
+                }
+                Ok(result) => log::warn!("NTP via {server} failed: {result}"),
+                Err(e) => log::warn!("NTP via {server}: {e}"),
+            }
         }
-        self.read_clock()?.ok_or(Error::State)
+        Err(Error::Rejected)
     }
 
     fn post(&mut self, request: &DeviceRequest<'_>) -> Result<u16, Error> {
