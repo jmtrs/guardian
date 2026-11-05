@@ -109,3 +109,21 @@ Sin pull-down en INT1 no hubo falsos disparos: la salida push-pull fija el nivel
 
 Lección: los cables dupont baratos fallan por dentro sin que se note. Antes de
 sospechar del chip, mirar los niveles de las líneas al arrancar.
+
+## 2026-11-05 · Unidad 1 · Camino de la batería (preparación del banco)
+
+Medido con multímetro, celda LiitoKala 25R a 3,798 V.
+
+| Comprobación | Resultado | Lectura |
+|---|---|---|
+| Continuidad + portapilas ↔ pin `V_BAT`, sin celda | Pita | `V_BAT` es el + de la celda, directo |
+| Continuidad − portapilas ↔ pin `GND`, sin celda | No pita | La protección DW06D (U8) está en el lado −. Sin celda no tiene alimentación y sus MOSFET quedan abiertos |
+| `V_BAT`–`GND` con celda, sin USB | 3,789 V | 9 mV de caída en contactos y protección. Con celda, la protección conduce |
+| − portapilas ↔ `GND` con celda | 0 V | Ídem |
+
+Consecuencia para el banco: la batería − va al contacto − del portapilas, no
+a la GND. Así la protección sigue actuando y su consumo entra en P1. Diagrama
+corregido.
+
+Con USB y sin celda, `!vbat` lee 4268 mV: es la salida del cargador CN3065,
+no una batería.
