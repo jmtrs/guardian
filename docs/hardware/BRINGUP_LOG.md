@@ -297,3 +297,28 @@ Firmware sin identidad compilada; la identidad sale de NVS. USB conectado.
 | `!provision` con id o secreto no válidos | Rechazado, nada guardado |
 | Dos `!event` justo tras registrarse | `+CNTP: 6` (NTP sin respuesta a tiempo): sin hora, no se envía. Arreglo: tres servidores NTP en orden |
 | Tras el arreglo: `!event` × 2, reset, `!event` | seq 800, 801 y 802, todas **202** |
+
+## 2026-11-05 · Unidad 1 · Incidencia: protección de batería U8 dañada
+
+Al final de una carga por USB, con la celda en el banco (fuera del portapilas,
+cables al INA219), **salió humo de la zona de potencia**. La celda estaba fría.
+
+| Comprobación | Resultado |
+|---|---|
+| S3, INA219, ESP32, PSRAM, LIS3DH, módem, LTE y puente de consola | Funcionan |
+| Celda en vacío frente al bus del INA a 48,6 mA | 3,95 V frente a 3,74 V: **~4,4 Ω** en el camino (antes ~0,6 Ω) |
+| GND de la placa ↔ contacto − del portapilas | **193 mV** a ~48 mA (sano: unos mV). El defecto está en ese tramo |
+| Inspección | El chip de 6 patas de la protección (**U8**, marcado `DW06D`/`DW060`) tiene el recubrimiento saltado |
+
+Lectura: uno de los MOSFET integrados de U8 quedó dañado a medias (~4 Ω). Con
+~285 mA de carga disipaba ~0,3 W y humeó. Causa más probable: desgaste
+acumulado. Los "cortes de batería" de la mañana (0,48 V, placa apagada sin
+tocar nada) eran casi seguro disparos de U8 ante picos, más los transitorios de
+conectar y desconectar cables con la batería puesta. El firmware no controla ni
+el cargador ni la protección. No se descarta una pieza débil de fábrica.
+
+Estado: la placa funciona **con USB y sin batería** (U8 no está en ese camino).
+**No usar con batería ni cargar** hasta sustituir U8 (DW06D, SOT-23-6).
+
+Regla nueva de banco: si la batería "se desconecta sola", parar e investigar
+la protección antes de seguir midiendo o cargando.

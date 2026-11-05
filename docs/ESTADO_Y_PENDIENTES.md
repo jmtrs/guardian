@@ -121,6 +121,12 @@ sería viable si se explican los ~15 mA de más del módem en sleep.
 - [ ] Causa de wake UNDEFINED tras un deep sleep (visto una vez).
 
 ### Medidas y hardware
+- [ ] **Unidad 1: sustituir U8 (protección DW06D), dañada el 2026-11-05** (humo
+      al final de una carga, ~4 Ω en el lado − de la batería). Hasta entonces,
+      solo con USB y sin batería. Ver la incidencia en el [registro](hardware/BRINGUP_LOG.md).
+- [ ] Rediseñar el banco de consumo para no conectar y desconectar con la
+      batería puesta, y tratar cualquier "corte de batería" como un disparo de
+      la protección.
 - [ ] **Explicar los ~15 mA de más del módem en P2b.** Primera hipótesis: la
       polarización de la antena GNSS activa. Decide si `REMOTE_READY` es viable.
 - [ ] P2a (sleep con VBUS, el riesgo documentado por LILYGO), P4 (GNSS) y
