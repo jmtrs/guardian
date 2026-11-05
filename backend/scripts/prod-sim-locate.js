@@ -102,6 +102,11 @@ async function post(deviceId, key, envelope) {
     if (r.status < 200 || r.status >= 300)
       throw new Error(`ingesta rechazada: HTTP ${r.status} ${r.text}`);
     const after = await prisma.command.findUnique({ where: { id: cmd.id } });
+    if (!after || after.status !== 'ACKED' || !after.resultEventId) {
+      throw new Error(
+        `LOCATE_NOW no quedo ACKED tras la ingesta (estado=${after?.status ?? 'ausente'})`,
+      );
+    }
     console.log(
       `comando ahora: ${after.status}${after.ackedAt ? ` ackedAt=${after.ackedAt.toISOString()}` : ''} resultEventId=${after.resultEventId ?? '-'}`,
     );

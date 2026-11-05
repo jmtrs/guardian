@@ -34,9 +34,11 @@ pub enum StepResult {
     OutboxReady,
     /// An event remains; skip producers and return to sleep for a later retry.
     OutboxRetained,
+    /// The current producer persisted a new event in the one-slot outbox.
+    EventStaged,
     /// Motion latch was read and cleared. If motion was detected, `durable`
-    /// confirms it was either staged in the outbox or coalesced in durable
-    /// storage for a later sequence.
+    /// confirms it was staged when the slot was free, or durably coalesced when
+    /// an older event still occupied the slot.
     MotionHandled {
         /// The hardware motion source was active.
         detected: bool,
@@ -56,6 +58,7 @@ pub struct DeviceCycle {
     stage: Stage,
     heartbeat_due: bool,
     outbox_blocked: bool,
+    resume_after_drain: Option<Stage>,
 }
 
 impl DeviceCycle {
@@ -66,6 +69,7 @@ impl DeviceCycle {
             stage: Stage::BootOrWake,
             heartbeat_due,
             outbox_blocked: false,
+            resume_after_drain: None,
         }
     }
 
@@ -87,15 +91,25 @@ impl DeviceCycle {
         self.stage = match (self.stage, result) {
             (Stage::BootOrWake, StepResult::Done) => Stage::DrainOutbox,
             (Stage::DrainOutbox, StepResult::OutboxRetained) => {
-                self.outbox_blocked = true;
-                Stage::ObserveMotion
+                if self.resume_after_drain.take().is_some() {
+                    Stage::Arm
+                } else {
+                    self.outbox_blocked = true;
+                    Stage::ObserveMotion
+                }
             }
-            (Stage::DrainOutbox, StepResult::OutboxReady) => Stage::ObserveMotion,
+            (Stage::DrainOutbox, StepResult::OutboxReady) => self
+                .resume_after_drain
+                .take()
+                .unwrap_or(Stage::ObserveMotion),
             (Stage::ObserveMotion, StepResult::MotionHandled { detected, durable })
                 if !detected || durable =>
             {
                 if self.outbox_blocked {
                     Stage::Arm
+                } else if detected {
+                    self.resume_after_drain = Some(Stage::PollCommands);
+                    Stage::DrainOutbox
                 } else {
                     Stage::PollCommands
                 }
@@ -113,7 +127,14 @@ impl DeviceCycle {
                 },
             )
             | (Stage::OptionalLocate, StepResult::Done) => self.after_optional_work(),
-            (Stage::HeartbeatIfDue, StepResult::Done) => Stage::Arm,
+            (Stage::OptionalLocate, StepResult::EventStaged) => {
+                self.resume_after_drain = Some(self.after_optional_work());
+                Stage::DrainOutbox
+            }
+            (Stage::HeartbeatIfDue, StepResult::EventStaged) => {
+                self.resume_after_drain = Some(Stage::Arm);
+                Stage::DrainOutbox
+            }
             (Stage::Arm, StepResult::Done) => Stage::Sleep,
             (Stage::Sleep, StepResult::Done) => Stage::Complete,
             _ => return Err(Error::State),

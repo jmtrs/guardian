@@ -55,6 +55,23 @@ describe('Devices + liveness (real PostgreSQL)', () => {
     expect(configured.heartbeatIntervalSec).toBe(300);
   });
 
+  it('protege en PostgreSQL el origen de apertura de cada incidente', async () => {
+    const provisioned = await devices.createDevice(`e2e-invariant-${randomUUID()}`);
+    const deviceId = provisioned.device.id;
+    createdDeviceIds.push(deviceId);
+
+    await expect(
+      prisma.incident.create({
+        data: { deviceId, kind: 'power_lost', openedByEventSeq: null },
+      }),
+    ).rejects.toThrow();
+    await expect(
+      prisma.incident.create({
+        data: { deviceId, kind: 'signal_lost', openedByEventSeq: 1 },
+      }),
+    ).rejects.toThrow();
+  });
+
   it('abre signal_lost y lo cierra solo al volver un evento autenticado', async () => {
     const provisioned = await devices.createDevice(`e2e-physical-${randomUUID()}`);
     const id = provisioned.device.id;

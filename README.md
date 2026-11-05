@@ -65,7 +65,7 @@ Contra el backend real (aprovisiona con el banco, ver
 
 ```bash
 make db-start && make db-migrate && make dev-backend &
-cd backend && npx ts-node scripts/bench.ts provision "Sim"   # imprime deviceId + secret + claimCode
+cd backend && npx ts-node scripts/bench.ts provision-simulator "Sim" # deviceId + secret + claimCode
 npx ts-node scripts/bench.ts claim <tu-email> <claimCode>    # reclama (o desde la app)
 export GUARDIAN_DEVICE_ID=...  GUARDIAN_DEVICE_SECRET_HEX=...  # lo que imprimió provision
 python3 -m guardian.simulator heartbeat            # HTTP 202 aceptado
@@ -77,6 +77,13 @@ python3 -m guardian.simulator locate               # poll + responde LOCATE_NOW 
 La secuencia se persiste en un fichero local (análogo a la NVS de la placa) y
 solo avanza tras un `202`. No exponer el backend local a Internet ni reutilizar
 secretos de banco en hardware real.
+
+Las identidades creadas antes de existir `DeviceKind` migran de forma segura a
+`PHYSICAL`: no se reclasifican en masa. Retira sus secretos de simulación y crea
+una identidad nueva con `provision-simulator`. Los comandos `send`, `fix`,
+`locate`, `poll` y `walk` de `bench.ts` exigen además
+`BENCH_DEVICE_ID=<id SIMULATOR>` para no tocar por accidente la secuencia de una
+placa física.
 
 ## Próximos pasos
 

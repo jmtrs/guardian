@@ -19,14 +19,15 @@
  *   npx ts-node scripts/bench.ts send <email> <kind>
  *       Firma un evento v2 y lo POSTea a http://localhost:3000/v1/events con la
  *       secuencia correcta (lastSeq+1). kind: suspected_movement | heartbeat |
- *       power_lost | gnss_fix | battery_low. Telemetria power incluida (v2).
+ *       power_lost | gnss_fix | battery_low. Requiere BENCH_DEVICE_ID de tipo
+ *       SIMULATOR. Telemetria power incluida (v2).
  *
  *   npx ts-node scripts/bench.ts locate <email>
  *       Crea un comando LOCATE_NOW (PENDING) llamando al servicio.
  *
  *   npx ts-node scripts/bench.ts poll <email>
  *       Poll del dispositivo (canal comandos, firmado con K_command) via
- *       POST /v1/commands/poll. Imprime los PENDING vivos.
+ *       POST /v1/commands/poll. Requiere BENCH_DEVICE_ID de tipo SIMULATOR.
  *
  *   npx ts-node scripts/bench.ts fix <email> [commandId]
  *       Envia un gnss_fix v2 con commandId (toma el PENDING mas reciente si
@@ -47,6 +48,22 @@ import { decryptSecret } from '../src/devices/secret-crypto';
 import { DeviceKind } from '@prisma/client';
 
 const BASE = process.env.BENCH_BASE ?? 'http://localhost:3000';
+
+async function simulatorDevice(prisma: PrismaService, email: string) {
+  const deviceId = process.env.BENCH_DEVICE_ID;
+  if (!deviceId || !/^[A-Za-z0-9_-]{20,64}$/.test(deviceId)) {
+    throw new Error('BENCH_DEVICE_ID obligatorio (CUID/UUID de tipo SIMULATOR)');
+  }
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) throw new Error(`No hay usuario con email ${email}. Inicia sesion en la app primero.`);
+  const device = await prisma.device.findFirst({
+    where: { id: deviceId, ownerId: user.id, kind: DeviceKind.SIMULATOR },
+  });
+  if (!device) {
+    throw new Error(`${deviceId} no es un SIMULATOR propiedad de ${email}`);
+  }
+  return { user, device };
+}
 
 async function firstDevice(prisma: PrismaService, email: string) {
   const user = await prisma.user.findUnique({ where: { email } });
@@ -101,8 +118,7 @@ async function main() {
     }
 
     if (cmd === 'send' || cmd === 'fix') {
-      const { device } = await firstDevice(prisma, email);
-      if (!device) throw new Error('El usuario no tiene dispositivo. Ejecuta provision primero.');
+      const { device } = await simulatorDevice(prisma, email);
       const seq = device.lastSeq + 1;
       const now = new Date().toISOString();
       // send <email> <kind> [vehicle|reserve]: rail que alimenta el evento.
@@ -156,8 +172,7 @@ async function main() {
     }
 
     if (cmd === 'locate') {
-      const { user, device } = await firstDevice(prisma, email);
-      if (!device) throw new Error('El usuario no tiene dispositivo. Ejecuta provision primero.');
+      const { user, device } = await simulatorDevice(prisma, email);
       const svc = new DevicesService(prisma, new RetentionService(prisma));
       const command = await svc.requestLocate(device.id, user.id);
       console.log(
@@ -167,8 +182,7 @@ async function main() {
     }
 
     if (cmd === 'poll') {
-      const { device } = await firstDevice(prisma, email);
-      if (!device) throw new Error('El usuario no tiene dispositivo.');
+      const { device } = await simulatorDevice(prisma, email);
       const body = Buffer.from(
         JSON.stringify({ deviceId: device.id, polledAtUtc: new Date().toISOString() }),
         'utf8',
@@ -189,8 +203,7 @@ async function main() {
     }
 
     if (cmd === 'walk') {
-      const { device } = await firstDevice(prisma, email);
-      if (!device) throw new Error('El usuario no tiene dispositivo. Ejecuta provision primero.');
+      const { device } = await simulatorDevice(prisma, email);
       const n = Number(arg ?? 5);
       let seq = device.lastSeq;
       // Camina desde la ultima posicion conocida (o Madrid centro).
