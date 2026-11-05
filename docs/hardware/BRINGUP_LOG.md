@@ -284,3 +284,16 @@ Firmware compilado **sin** identidad (arranque: `device identity: none`).
 
 La secuencia se guarda en NVS antes de enviar: un fallo deja un hueco y nunca
 repite. Pendiente: cifrado de NVS y de flash.
+
+## 2026-11-05 · Unidad 1 · Regresión tras la revisión
+
+Firmware sin identidad compilada; la identidad sale de NVS. USB conectado.
+
+| Prueba | Resultado |
+|---|---|
+| Arranque, `!vbat`, `!lis` | identidad desde NVS, 4254 mV (USB), PASS 10/10 |
+| `AT+CCERTDELE` del paquete de CA y luego `!event` | Se reinstala solo (`installing CA bundle`), **202** |
+| Reaprovisionar el mismo id y luego `!event` | La secuencia sigue (798 → 799), **202**. Antes del arreglo se habría reiniciado a la hora |
+| `!provision` con id o secreto no válidos | Rechazado, nada guardado |
+| Dos `!event` justo tras registrarse | `+CNTP: 6` (NTP sin respuesta a tiempo): sin hora, no se envía. Arreglo: tres servidores NTP en orden |
+| Tras el arreglo: `!event` × 2, reset, `!event` | seq 800, 801 y 802, todas **202** |

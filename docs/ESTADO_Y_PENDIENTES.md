@@ -24,7 +24,7 @@ Detalle y números en el [registro de bring-up](hardware/BRINGUP_LOG.md).
 | LIS3DH | I²C a `0x18`, self-test a 1 g, interrupción despierta y desde deep sleep |
 | Sleep | P1 (módem apagado) 1,2 mA; P2b (LTE en sleep) 19,7 mA; despertar desde P2b con el módem aún registrado |
 | Evento firmado | Hora por NTP → sobre v2 → HMAC con `K_event` (HKDF) → HTTPS del módem con **certificado verificado** → 202 |
-| Identidad y secuencia | En NVS; la secuencia se reserva antes de enviar y sobrevive a reinicios |
+| Identidad y secuencia | En NVS; la secuencia se reserva antes de enviar, sobrevive a reinicios y a reaprovisionar el mismo id |
 | Anti-replay | Una secuencia vieja (reloj atrasado) recibió 409, como debe |
 | Flujo de usuario | Email OTP real (Resend) → reclamo con código → dispositivo y latido en la app |
 
@@ -61,7 +61,9 @@ sería viable si se explican los ~15 mA de más del módem en sleep.
   solo por una caída de tensión.
 
 **Red**
-- Orange ES no envía NITZ. `AT+CNTP` contra `pool.ntp.org` funciona.
+- Orange ES no envía NITZ. `AT+CNTP` funciona, pero justo después de
+  registrarse puede no responder a tiempo (`+CNTP: 6`): se prueban
+  pool.ntp.org, Cloudflare y Google por orden.
 - La red concede eDRX (82 s), pero no bajó el consumo en sleep.
 - Cloudflare sirve `aggc.dev` desde Let's Encrypt (YE1 → Root YE → X2 → X1).
   Puede cambiar a Google Trust Services al renovar: el paquete de CA incluye
