@@ -25,6 +25,8 @@ const READ_ERROR_BACKOFF: Duration = Duration::from_millis(10);
 const READER_STACK: usize = 6 * 1024;
 /// Longest wait for results owed by earlier commands before writing them off.
 const DRAIN_MAX: Duration = Duration::from_secs(2);
+/// Wait for a `DOWNLOAD` prompt after a payload command.
+const PROMPT_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// Receives every line the modem emits (responses and URCs), CR/LF stripped.
 pub type LineSink = Box<dyn Fn(&str) + Send>;
@@ -34,6 +36,17 @@ pub type LineSink = Box<dyn Fn(&str) + Send>;
 struct Shared {
     gate: Mutex<ResultGate>,
     changed: Condvar,
+    watch: Mutex<Watch>,
+    watched: Condvar,
+}
+
+/// Capture of the next line starting with a prefix: a response line
+/// (`+CCLK: ...`), a prompt (`DOWNLOAD`) or a URC (`+HTTPACTION: ...`). One at
+/// a time: commands are serialised by `&mut` on the modem.
+#[derive(Default)]
+struct Watch {
+    prefix: Option<&'static str>,
+    line: Option<String>,
 }
 
 impl Shared {
@@ -44,6 +57,12 @@ impl Shared {
     /// Called by the reader for every line, after the sink has run (the sink
     /// never runs under the lock, so a slow sink cannot block `command`).
     fn on_line(&self, line: &str) {
+        let mut watch = self.watch.lock().unwrap_or_else(PoisonError::into_inner);
+        if watch.line.is_none() && watch.prefix.is_some_and(|p| line.starts_with(p)) {
+            watch.line = Some(line.to_owned());
+            self.watched.notify_all();
+        }
+        drop(watch);
         if let Some(result) = final_result(line) {
             self.lock().offer(result);
             self.changed.notify_all();
@@ -73,6 +92,8 @@ impl AtTransport {
         let shared = Arc::new(Shared {
             gate: Mutex::default(),
             changed: Condvar::new(),
+            watch: Mutex::default(),
+            watched: Condvar::new(),
         });
         spawn_reader(Arc::clone(&uart), Arc::clone(&shared), sink)?;
         Ok(Self { uart, shared, pads })
@@ -83,6 +104,83 @@ impl AtTransport {
     /// # Errors
     /// [`Error::Rejected`] on `ERROR`, [`Error::Timeout`] if no result arrives.
     pub fn command(&self, cmd: &str, timeout: Duration) -> Result<(), Error> {
+        self.begin(cmd);
+        self.finish(timeout)
+    }
+
+    /// Send a command and return the first line starting with `prefix` seen
+    /// from now until `wait` after its final result: a response line, or an
+    /// unsolicited result the command triggers (`+HTTPACTION` after `OK`).
+    ///
+    /// # Errors
+    /// As [`command`](Self::command); [`Error::Timeout`] if no such line came.
+    pub fn query(
+        &self,
+        cmd: &str,
+        prefix: &'static str,
+        timeout: Duration,
+        wait: Duration,
+    ) -> Result<String, Error> {
+        self.arm(prefix);
+        self.command(cmd, timeout)?;
+        self.watched_line(wait).ok_or(Error::Timeout)
+    }
+
+    /// Send a command that answers `DOWNLOAD`, then `payload` (no CRLF), and
+    /// wait for the final result.
+    ///
+    /// # Errors
+    /// [`Error::Timeout`] if the prompt or the result never comes,
+    /// [`Error::Rejected`] on `ERROR`.
+    pub fn command_with_payload(
+        &self,
+        cmd: &str,
+        payload: &[u8],
+        timeout: Duration,
+    ) -> Result<(), Error> {
+        self.arm("DOWNLOAD");
+        self.begin(cmd);
+        if self.watched_line(PROMPT_TIMEOUT).is_none() {
+            // The result (an ERROR, or nothing) still settles the gate.
+            return self.finish(timeout).and(Err(Error::Timeout));
+        }
+        if self.uart.write(payload).is_err() {
+            log::error!("modem UART write failed");
+        }
+        self.finish(timeout)
+    }
+
+    fn arm(&self, prefix: &'static str) {
+        *self
+            .shared
+            .watch
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Watch {
+            prefix: Some(prefix),
+            line: None,
+        };
+    }
+
+    /// Wait for the armed capture, then disarm.
+    fn watched_line(&self, wait: Duration) -> Option<String> {
+        let (mut watch, _) = self
+            .shared
+            .watched
+            .wait_timeout_while(
+                self.shared
+                    .watch
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner),
+                wait,
+                |w| w.line.is_none(),
+            )
+            .unwrap_or_else(PoisonError::into_inner);
+        watch.prefix = None;
+        watch.line.take()
+    }
+
+    /// Wait until no earlier result is owed, then send `cmd`.
+    fn begin(&self, cmd: &str) {
         let (mut gate, drained) = self
             .shared
             .changed
@@ -95,7 +193,10 @@ impl AtTransport {
         gate.begin();
         drop(gate);
         self.write_line(cmd);
+    }
 
+    /// Wait for the final result of the command sent by [`begin`](Self::begin).
+    fn finish(&self, timeout: Duration) -> Result<(), Error> {
         let (mut gate, _) = self
             .shared
             .changed

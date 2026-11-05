@@ -8,6 +8,7 @@
 mod board;
 mod console;
 mod hold;
+mod identity;
 mod modem;
 mod platform;
 mod wiring;
@@ -66,6 +67,7 @@ fn main() -> Result<(), EspError> {
             dtr: board.modem_dtr,
         },
         Box::new(|line| println!("< {line}")),
+        identity::BACKEND_URL,
     )?;
 
     // Sampled before the I2C driver owns the pads; printed once the console is up.
@@ -95,7 +97,19 @@ fn main() -> Result<(), EspError> {
     )?);
 
     let mut service = Bringup::new(modem, motion, platform, Stdout);
+    let identity = identity::from_build();
+    if let Some(Ok(identity)) = identity.clone() {
+        service = service.with_identity(identity);
+    }
     service.announce();
+    match identity {
+        Some(Ok(_)) => println!(
+            "device identity: compiled in, backend {}",
+            identity::BACKEND_URL
+        ),
+        Some(Err(e)) => println!("device identity INVALID ({e}): !event disabled"),
+        None => println!("device identity: none (!event disabled)"),
+    }
     match bus_levels {
         Ok(levels) => println!("{levels}"),
         Err(e) => println!("I2C wiring check failed: {e}"),

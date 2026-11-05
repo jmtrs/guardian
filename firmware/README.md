@@ -20,6 +20,9 @@ INA219) mide P1–P5. El firmware de producción reutilizará `guardian-core` y
 ## Arquitectura (hexagonal)
 
 ```text
+ guardian-protocol (no_std, forbid(unsafe))
+ └── contrato v2: HKDF/HMAC (RustCrypto), sobre JSON exacto, UtcTime
+          ▲ usa
  guardian-core (no_std, forbid(unsafe))
  ├── accel.rs     Accel, Threshold (newtype: solo existe ya acotado)
  ├── command.rs   parser de consola, pureza total
@@ -46,7 +49,7 @@ INA219) mide P1–P5. El firmware de producción reutilizará `guardian-core` y
 ```
 
 Reglas:
-- `guardian-core` no depende de nada.
+- `guardian-protocol` solo depende de `RustCrypto`; `guardian-core`, solo de `guardian-protocol`.
 - `guardian-drivers` depende solo del core y de `embedded-hal`.
 - Solo `bringup` y `power-bench` conocen ESP-IDF.
 - Ningún archivo pasa de 300 líneas. `missing_docs = "deny"` y clippy `pedantic` en todos los crates.
@@ -54,7 +57,7 @@ Reglas:
 ## Tests (sin placa)
 
 ```bash
-make test-firmware          # core (44) + drivers (25)
+make test-firmware          # protocol (11) + core (52) + drivers (29)
 ```
 
 Los drivers verifican el tráfico I²C exacto: la receta de interrupción AN3308,
@@ -126,10 +129,34 @@ sensor pierde alimentación, la línea flota: la placa despierta en bucle o
 | `!sleep [mg]` | 4b / P1 | módem OFF, deep sleep, despertar por movimiento |
 | `!standby [mg]` | P2 | módem registrado en su sleep LTE (`AT+CSCLK=1`, DTR alto retenido), deep sleep, despertar por movimiento. Registrar antes (`!diag`) |
 | `!vbat` | — | rail de batería |
+| `!event` | 7 | firma un `heartbeat` v2 y lo envía por LTE (HTTPS del módem) a `/v1/events`; imprime el estado HTTP |
 | `!modem on\|off` | — | secuencia de potencia del módem |
 | `AT...` | — | cualquier línea sin `!` va tal cual al módem |
 
 Umbral por defecto 80 mg, rango 16–2032 mg (pasos de 16 mg a ±2 g).
+
+## Primer evento firmado (paso 7)
+
+El dispositivo de banco se aprovisiona en el backend (`createDevice`, que
+imprime `deviceId` + `secret`) y la identidad se compila en el binario desde el
+entorno. **No entra en git**: el ELF queda en `target/`, ignorado.
+
+```bash
+export GUARDIAN_DEVICE_ID=...            # lo que imprimió el aprovisionamiento
+export GUARDIAN_DEVICE_SECRET_HEX=...    # K_root, 64 hex
+# GUARDIAN_BACKEND_URL=...               # opcional, por defecto https://gtapi.aggc.dev
+cargo run --release
+```
+
+`!event` toma la hora de la red (`AT+CCLK`, a UTC), usa como secuencia los
+segundos UTC (solo banco: crece sin NVS, válida hasta 2038), firma con
+`K_event` y envía por `AT+HTTP*` con SNI. Al arrancar, la consola dice si hay
+identidad compilada.
+
+**Limitación del banco:** el certificado del servidor no se verifica
+(`authmode 0`). La firma HMAC impide falsificar o alterar eventos, pero el
+contenido es legible por un intermediario. En producción: CA cargada y
+`authmode 1`.
 
 ## Banco de consumo (P1–P5)
 

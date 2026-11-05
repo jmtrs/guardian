@@ -28,11 +28,11 @@ jobs:
         run: python -m guardian.demo
 
   firmware-host:
-    name: Firmware core + drivers (host)
+    name: Firmware protocol + core + drivers (host)
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        crate: [guardian-core, guardian-drivers]
+        crate: [guardian-protocol, guardian-core, guardian-drivers]
     defaults:
       run:
         working-directory: firmware/${{ matrix.crate }}

@@ -3,6 +3,7 @@
 //!
 //! Power-on sequence mirrors LILYGO `examples/ATdebug` for `LILYGO_T_A7670`.
 
+mod http;
 mod transport;
 
 use std::thread;
@@ -59,6 +60,9 @@ pub struct A7670 {
     dtr: PinDriver<'static, Output>,
     /// Every pad wired to the modem, for sleep hold; UART TX at index [`TX`].
     pads: [PinId; 5],
+    /// Backend base URL for [`Uplink`](guardian_core::ports::Uplink), no
+    /// trailing slash.
+    backend: &'static str,
 }
 
 impl A7670 {
@@ -72,6 +76,7 @@ impl A7670 {
         (tx_pad, rx_pad): (PinId, PinId),
         pins: ModemPins<E, K, R, D>,
         sink: LineSink,
+        backend: &'static str,
     ) -> Result<Self, EspError>
     where
         E: OutputPin + 'static,
@@ -94,6 +99,7 @@ impl A7670 {
             reset_active_high: pins.reset_active_high,
             dtr: PinDriver::output(pins.dtr)?,
             pads,
+            backend,
         };
         // PinDriver::output keeps whatever the output latch holds: start from
         // a known state. Control lines first (PWRKEY idle, reset inactive,

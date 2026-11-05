@@ -67,6 +67,7 @@ test-mobile:
 	@pnpm run test:mobile || true
 
 test-firmware:
+	@cd firmware/guardian-protocol && cargo test
 	@cd firmware/guardian-core && cargo test
 	@cd firmware/guardian-drivers && cargo test
 
