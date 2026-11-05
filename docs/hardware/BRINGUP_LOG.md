@@ -311,6 +311,7 @@ cables al INA219), **salió humo de la zona de potencia**. La celda estaba fría
 | Inspección | El chip de 6 patas de la protección (**U8**, marcado `DW06D`/`DW060`) tiene el recubrimiento saltado |
 | Esquema V1.4 (página 4) | Ese tramo es celda − → `PY1`.2 → **Q4 AO3400** (protección de polaridad) → B− → **U8** → `GND`. La caída medida incluye Q4; al sustituir U8, comprobar también Q4 (caída entre `PY1`.2 y B−) |
 | Caída en Q4 (contacto − del portapilas ↔ pata 6 de U8, ~38 mA) | **~0,5 V**: la tensión de su diodo interno. Q4 ya no conduce bien por su canal. La tensión que llega a la placa empeoraba (3,52–3,68 V a 38 mA). **Cambiar Q4 y U8**, y comprobar la resistencia de puerta `N7` (100 Ω) |
+| Pasivos de alrededor (sin alimentación, medidos desde las patas) | `N7` ~100 Ω, `N6` ~100 Ω, `N4` ~1 kΩ, `C40` sin cortocircuito: **todo bien**. El fallo de Q4 es del propio transistor, no de su resistencia de puerta. **Solo hay que cambiar U8 y Q4** |
 
 Lectura: **U8 se dañó durante el uso de hoy, no venía así.** Por la mañana
 estaba sana: con la celda en el portapilas caían solo 9 mV a 47 mA, y el
