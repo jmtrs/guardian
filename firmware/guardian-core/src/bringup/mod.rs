@@ -86,6 +86,7 @@ impl<M: Modem, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
              \x20 !lis           accelerometer self-test (expects ~1 g at rest)\n\
              \x20 !arm [mg]      watch motion interrupt for {}s (default {} mg)\n\
              \x20 !sleep [mg]    P1: modem off, deep sleep until motion\n\
+             \x20 !standby [mg]  P2: modem in LTE sleep, deep sleep until motion\n\
              \x20 !vbat          battery rail\n\
              \x20 !help\n",
             WATCH_DURATION.as_secs(),
@@ -122,6 +123,9 @@ impl<M: Modem, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
             }
             Command::Sleep(threshold) => {
                 let _ = self.sleep_until_motion(threshold);
+            }
+            Command::Standby(threshold) => {
+                let _ = self.sleep_with_lte(threshold);
             }
             Command::Battery => self.battery(),
             Command::At(text) => self.passthrough(text),

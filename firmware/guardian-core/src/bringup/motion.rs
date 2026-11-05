@@ -13,6 +13,31 @@ const RELATCH_CHECK: Duration = Duration::from_millis(50);
 /// Consecutive failed acknowledges after which the watch gives up (bus fault).
 const MAX_ACK_FAILURES: u32 = 3;
 
+/// What the modem does while the MCU sleeps.
+#[derive(Clone, Copy)]
+enum ModemSleep {
+    /// Powered down and supply cut (P1).
+    Off,
+    /// Registered, in its own LTE sleep (P2).
+    Standby,
+}
+
+impl ModemSleep {
+    fn test(self) -> &'static str {
+        match self {
+            Self::Off => "P1",
+            Self::Standby => "P2",
+        }
+    }
+
+    fn state(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Standby => "in LTE sleep",
+        }
+    }
+}
+
 impl<M: Modem, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
     /// Step 3: detect the accelerometer and check it reads ~1 g at rest.
     ///
@@ -118,8 +143,26 @@ impl<M: Modem, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
     /// # Errors
     /// The reason for refusing, after reporting it.
     pub fn sleep_until_motion(&mut self, threshold: Threshold) -> Result<()> {
+        self.sleep_on_motion(threshold, ModemSleep::Off)
+    }
+
+    /// Power test P2: as [`sleep_until_motion`](Self::sleep_until_motion),
+    /// but the modem stays registered in its own LTE sleep. Register first
+    /// (`!diag` shows `+CEREG: 0,1`): a modem still searching never sleeps.
+    ///
+    /// # Errors
+    /// The reason for refusing (including a modem that does not power on),
+    /// after reporting it.
+    pub fn sleep_with_lte(&mut self, threshold: Threshold) -> Result<()> {
+        self.sleep_on_motion(threshold, ModemSleep::Standby)
+    }
+
+    fn sleep_on_motion(&mut self, threshold: Threshold, modem: ModemSleep) -> Result<()> {
         self.probe()?;
-        self.modem_off();
+        match modem {
+            ModemSleep::Off => self.modem_off(),
+            ModemSleep::Standby => self.modem_on()?,
+        }
         self.arm(threshold)?;
         if let Err(e) = self.interrupt_line_clear() {
             say!(self, "refusing to sleep: it would wake at once");
@@ -129,13 +172,19 @@ impl<M: Modem, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
             say!(self, "refusing to sleep: wake source not armed ({e})");
             return Err(e);
         }
-        if let Err(e) = self.modem.park_for_sleep() {
+        let parked = match modem {
+            ModemSleep::Off => self.modem.park_for_sleep(),
+            ModemSleep::Standby => self.modem.park_in_standby(),
+        };
+        if let Err(e) = parked {
             say!(self, "refusing to sleep: modem pins not held ({e})");
             return Err(e);
         }
         say!(
             self,
-            "P1: deep sleep, modem off. Measure current now; move sensor to wake."
+            "{}: deep sleep, modem {}. Measure current now; move sensor to wake.",
+            modem.test(),
+            modem.state()
         );
         self.platform.deep_sleep();
         Ok(())

@@ -44,6 +44,16 @@ pub trait Modem {
     /// # Errors
     /// Any failure: sleeping then would measure P1 in an unknown state.
     fn park_for_sleep(&mut self) -> Result<()>;
+
+    /// Let the modem sleep on its own while staying registered, and latch
+    /// every line that keeps it so (supply on, sleep allowed, UART idle) to
+    /// survive deep sleep. Same all-or-nothing contract as
+    /// [`park_for_sleep`](Self::park_for_sleep): on error the modem is left
+    /// awake and usable. Called only right before [`Platform::deep_sleep`].
+    ///
+    /// # Errors
+    /// Any failure: sleeping then would measure P2 in an unknown state.
+    fn park_in_standby(&mut self) -> Result<()>;
 }
 
 /// Identity of a detected sensor.

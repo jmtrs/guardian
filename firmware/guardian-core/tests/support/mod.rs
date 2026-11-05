@@ -18,6 +18,8 @@ pub struct World {
     pub power_off_calls: u32,
     pub park_result: Result<(), Error>,
     pub park_calls: u32,
+    pub standby_result: Result<(), Error>,
+    pub standby_calls: u32,
     pub commands: Vec<String>,
     /// `AT+CPIN?` is rejected this many times before succeeding.
     pub cpin_failures: u32,
@@ -52,6 +54,8 @@ impl Default for World {
             power_off_calls: 0,
             park_result: Ok(()),
             park_calls: 0,
+            standby_result: Ok(()),
+            standby_calls: 0,
             commands: Vec::new(),
             cpin_failures: 0,
             raw: Vec::new(),
@@ -126,6 +130,11 @@ impl Modem for Fake {
         let mut w = self.0.borrow_mut();
         w.park_calls += 1;
         w.park_result
+    }
+    fn park_in_standby(&mut self) -> Result<(), Error> {
+        let mut w = self.0.borrow_mut();
+        w.standby_calls += 1;
+        w.standby_result
     }
 }
 

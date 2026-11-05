@@ -26,8 +26,11 @@ pub enum Command<'a> {
     Sensor,
     /// `!arm [mg]`: watch the motion interrupt while awake.
     Arm(Threshold),
-    /// `!sleep [mg]`: deep sleep until motion (power test P1).
+    /// `!sleep [mg]`: deep sleep until motion, modem off (power test P1).
     Sleep(Threshold),
+    /// `!standby [mg]`: deep sleep until motion, modem registered in its own
+    /// LTE sleep (power test P2).
+    Standby(Threshold),
     /// `!vbat`: battery rail.
     Battery,
     /// Not a `!` line: send to the modem as-is (leading spaces trimmed).
@@ -61,6 +64,7 @@ impl<'a> Command<'a> {
             "vbat" => Self::no_argument(Self::Battery, rest),
             "arm" => Self::threshold(rest).map_or(Self::InvalidArgument(rest), Self::Arm),
             "sleep" => Self::threshold(rest).map_or(Self::InvalidArgument(rest), Self::Sleep),
+            "standby" => Self::threshold(rest).map_or(Self::InvalidArgument(rest), Self::Standby),
             "modem" => match rest {
                 "on" => Self::ModemOn,
                 "off" => Self::ModemOff,
@@ -134,6 +138,10 @@ mod tests {
             Command::parse("!sleep 120"),
             Command::Sleep(Threshold::clamped(120))
         );
+        assert_eq!(
+            Command::parse("!standby"),
+            Command::Standby(Threshold::DEFAULT)
+        );
         assert_eq!(Command::parse("!arm 1"), Command::Arm(Threshold::MIN));
         assert_eq!(Command::parse("!arm 99999"), Command::Arm(Threshold::MAX));
     }
@@ -148,6 +156,7 @@ mod tests {
             ("!modem", ""),
             ("!modem maybe", "maybe"),
             ("!diag now", "now"),
+            ("!standby lte", "lte"),
         ] {
             assert_eq!(
                 Command::parse(line),
