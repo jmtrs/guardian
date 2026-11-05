@@ -9,6 +9,7 @@ use core::time::Duration;
 
 use crate::accel::{Accel, Threshold};
 use crate::error::Result;
+use crate::power::PowerSample;
 
 /// Cellular modem with an AT interface and GNSS.
 ///
@@ -158,4 +159,22 @@ pub trait Platform {
     ///
     /// Does not return on hardware; fakes return so tests can observe it.
     fn deep_sleep(&mut self);
+}
+
+/// High-side current monitor in series with a supply (power bench).
+pub trait PowerMeter {
+    /// Detect and configure the monitor. Idempotent.
+    ///
+    /// # Errors
+    /// [`Error::NotFound`](crate::Error::NotFound) if absent or not the
+    /// expected chip, bus errors otherwise.
+    fn probe(&mut self) -> Result<()>;
+
+    /// Latest conversion.
+    ///
+    /// # Errors
+    /// [`Error::State`](crate::Error::State) before a successful probe,
+    /// [`Error::Rejected`](crate::Error::Rejected) if the current exceeded
+    /// the measurement range, bus errors otherwise.
+    fn sample(&mut self) -> Result<PowerSample>;
 }

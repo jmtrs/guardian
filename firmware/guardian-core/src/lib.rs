@@ -4,9 +4,10 @@
 //!
 //! Hexagonal layout:
 //!
-//! - **Domain** ([`accel`], [`command`]): pure rules, no I/O.
+//! - **Domain** ([`accel`], [`command`], [`power`]): pure rules, no I/O.
 //! - **Ports** ([`ports`]): traits the core needs from the outside world
-//!   (modem, motion sensor, platform). Output goes through [`core::fmt::Write`].
+//!   (modem, motion sensor, platform, power meter). Output goes through
+//!   [`core::fmt::Write`].
 //! - **Application** ([`bringup`]): bench bring-up use cases driving the ports,
 //!   mapped to `docs/COMPONENTES.md` "Primera secuencia al recibir las piezas".
 //!
@@ -19,5 +20,6 @@ pub mod bringup;
 pub mod command;
 pub mod error;
 pub mod ports;
+pub mod power;
 
 pub use error::Error;
