@@ -21,6 +21,11 @@ const UPLOAD_WINDOW_MS: u32 = 10_000;
 const UPLOAD_TIMEOUT: Duration = Duration::from_secs(12);
 /// Connect + TLS + request + response, as the modem reports it.
 const ACTION_WAIT: Duration = Duration::from_secs(60);
+/// NTP server for the modem clock. Plain NTP is unauthenticated: it only
+/// feeds `observedAtUtc`, and the bench sequence (UTC seconds) is checked
+/// against replay by the backend, which accepts only increasing values.
+const NTP_SERVER: &str = "pool.ntp.org";
+const NTP_WAIT: Duration = Duration::from_secs(20);
 /// Device-channel user agent: Cloudflare blocks unknown or empty ones.
 const USER_AGENT: &str = "Guardian-Device/2";
 
@@ -34,8 +39,18 @@ const TLS_SETUP: [&str; 3] = [
 
 impl Uplink for A7670 {
     fn network_time(&mut self) -> Result<UtcTime, Error> {
-        let line = self.at.query("AT+CCLK?", "+CCLK:", SHORT, SHORT)?;
-        parse_cclk(&line).ok_or(Error::State)
+        // Always resync before signing. Found on unit 1: Orange ES sends no
+        // NITZ, and after a modem power cycle the clock resumes from an old,
+        // plausible-looking time instead of its 1970 default, so a parsable
+        // `+CCLK` proves nothing. A stale clock made the bench sequence go
+        // backwards (409 replay). NTP over the data bearer sets UTC (zone 0).
+        self.command(&format!(r#"AT+CNTP="{NTP_SERVER}",0"#), SHORT)?;
+        let result = self.at.query("AT+CNTP", "+CNTP:", SHORT, NTP_WAIT)?;
+        if result.trim_end() != "+CNTP: 0" {
+            log::warn!("NTP sync failed: {result}");
+            return Err(Error::Rejected);
+        }
+        self.read_clock()?.ok_or(Error::State)
     }
 
     fn post(&mut self, request: &DeviceRequest<'_>) -> Result<u16, Error> {
@@ -48,6 +63,12 @@ impl Uplink for A7670 {
 }
 
 impl A7670 {
+    /// The modem clock in UTC, `None` while it was never set.
+    fn read_clock(&mut self) -> Result<Option<UtcTime>, Error> {
+        let line = self.at.query("AT+CCLK?", "+CCLK:", SHORT, SHORT)?;
+        Ok(parse_cclk(&line))
+    }
+
     fn http_post(&mut self, request: &DeviceRequest<'_>) -> Result<u16, Error> {
         for line in TLS_SETUP {
             self.command(line, SHORT)?;
@@ -59,14 +80,16 @@ impl A7670 {
         )?;
         self.command(r#"AT+HTTPPARA="CONTENT","application/json""#, SHORT)?;
         self.command(r#"AT+HTTPPARA="SSLCFG",0"#, SHORT)?;
-        // `\r\n` is literal here: the modem expands it between headers.
-        self.command(
-            &format!(
-                r#"AT+HTTPPARA="USERDATA","X-Device-Id: {}\r\nX-Guardian-Signature: {}\r\nUser-Agent: {USER_AGENT}""#,
-                request.device_id, request.signature
-            ),
-            SHORT,
-        )?;
+        // One header per USERDATA: this firmware appends each call, but sends
+        // a `\r\n` inside one value literally (checked on unit 1 against an
+        // echo service). It sends no User-Agent of its own.
+        for header in [
+            format!("X-Device-Id: {}", request.device_id),
+            format!("X-Guardian-Signature: {}", request.signature),
+            format!("User-Agent: {USER_AGENT}"),
+        ] {
+            self.command(&format!(r#"AT+HTTPPARA="USERDATA","{header}""#), SHORT)?;
+        }
         self.at.command_with_payload(
             &format!("AT+HTTPDATA={},{UPLOAD_WINDOW_MS}", request.body.len()),
             request.body,

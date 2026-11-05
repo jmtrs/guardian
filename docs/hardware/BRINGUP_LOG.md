@@ -221,3 +221,27 @@ pendiente.
 Pasos de COMPONENTES.md: **P1 ✅**, **P2b ✅** (valor anómalo, en
 investigación), **P3 ✅** (desde módem apagado). P2a (VBUS) y P4 (GNSS)
 pendientes.
+
+## 2026-11-05 · Unidad 1 · Paso 7: primer evento firmado v2
+
+Dispositivo de banco aprovisionado en el backend de producción
+(`createDevice` dentro del contenedor; `K_root` fuera del repo). Identidad
+compilada en el binario desde el entorno. `!event` con USB conectado (el pico
+de TX no tumba el módem por los cables del banco).
+
+| Intento | Resultado | Lectura y arreglo |
+|---|---|---|
+| 1 | `+CCLK: "70/01/01..."`: sin hora, no se envía nada | Orange ES no manda NITZ (`+CTZU: 0`). `AT+CNTP` con pool.ntp.org sí funciona |
+| 2 | HTTPS hasta el backend, **HTTP 400** `Missing raw body, X-Device-Id or X-Guardian-Signature` | El firmware del A7670 manda literal el `\r\n` dentro de `USERDATA` (lo enseñó un servicio de eco). Sí acumula varias llamadas `USERDATA`: una por cabecera. Tampoco manda User-Agent propio |
+| 3 | **HTTP 202 aceptado** | `lastSeq 1793878424`, `lastReserveMv 4252` (USB conectado), `source reserve` en la base de datos |
+| 4 | Tras `!modem off`/`on`, **HTTP 409** (secuencia repetida) | El reloj del módem retomó una hora antigua y plausible (11:24 a las 11:35): la secuencia de banco (segundos UTC) retrocedió. La defensa anti-replay del backend funcionó. Arreglo: NTP siempre antes de firmar |
+| 5 | NTP → `+CNTP: 0` → **HTTP 202** | Cadena completa validada |
+
+Cadena validada: hora por NTP → sobre v2 (198 bytes) → HMAC con `K_event`
+(HKDF) → HTTPS por el módem con SNI y Cloudflare → backend 202.
+
+Pendiente de producción: verificar el certificado del servidor
+(`authmode 1` con la CA), secuencia en NVS en vez de la hora, y NTP
+autenticado o hora por GNSS.
+
+Pasos de COMPONENTES.md: **7 (primer evento firmado v2) ✅**.

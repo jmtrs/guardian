@@ -72,11 +72,12 @@ pub struct DeviceRequest<'a> {
 
 /// Network access through the cellular modem.
 pub trait Uplink {
-    /// Current UTC time as kept by the network.
+    /// Current UTC time, freshly synchronised from the network: a free-running
+    /// modem clock can resume from a stale time after a power cycle.
     ///
     /// # Errors
-    /// [`Error::State`](crate::Error::State) if the modem has no network time
-    /// yet, transport errors otherwise.
+    /// [`Error::State`](crate::Error::State) if no valid time is available,
+    /// transport or synchronisation errors otherwise.
     fn network_time(&mut self) -> Result<UtcTime>;
 
     /// `POST` a signed request to the backend over HTTPS.
