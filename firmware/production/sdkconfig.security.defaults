@@ -1,0 +1,30 @@
+# REVIEW-ONLY TEMPLATE. Applying this to a board makes the first secure boot
+# permanently change eFuses. Never add it to bringup/sdkconfig.defaults.
+
+# Secure Boot v2 on ESP32 requires ECO3 (the measured unit is rev v3.1).
+CONFIG_ESP32_REV_MIN_3=y
+CONFIG_ESP32_REV_MIN=3
+CONFIG_ESP32_REV_MIN_FULL=300
+CONFIG_SECURE_BOOT=y
+CONFIG_SECURE_BOOT_V2_ENABLED=y
+CONFIG_SECURE_SIGNED_APPS_RSA_SCHEME=y
+CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES=y
+CONFIG_SECURE_BOOT_SIGNING_KEY="__OUTSIDE_REPOSITORY__/guardian-secure-boot.pem"
+CONFIG_SECURE_DISABLE_ROM_DL_MODE=y
+# CONFIG_SECURE_INSECURE_ALLOW_DL_MODE is not set
+
+# Production devices use release mode; development mode is intentionally off.
+CONFIG_SECURE_FLASH_ENC_ENABLED=y
+CONFIG_SECURE_FLASH_ENCRYPTION_MODE_RELEASE=y
+# CONFIG_SECURE_FLASH_ENCRYPTION_MODE_DEVELOPMENT is not set
+
+# K_root and the durable outbox live in the default encrypted NVS partition.
+CONFIG_NVS_ENCRYPTION=y
+CONFIG_NVS_SEC_KEY_PROTECT_USING_FLASH_ENC=y
+
+# Explicitly keep potentially insecure escape hatches off.
+# CONFIG_SECURE_BOOT_ALLOW_JTAG is not set
+# CONFIG_SECURE_BOOT_ALLOW_ROM_BASIC is not set
+# CONFIG_SECURE_FLASH_UART_BOOTLOADER_ALLOW_DEC is not set
+# CONFIG_SECURE_FLASH_UART_BOOTLOADER_ALLOW_ENC is not set
+# CONFIG_SECURE_FLASH_UART_BOOTLOADER_ALLOW_CACHE is not set

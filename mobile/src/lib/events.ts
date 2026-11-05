@@ -5,6 +5,7 @@ export const KIND_GLYPH: Record<string, string> = {
   suspected_movement: '▲',
   battery_low: '▼',
   power_lost: '✕',
+  signal_lost: '∿',
   heartbeat: '♥',
   gnss_fix: '⌖',
 };
@@ -14,7 +15,7 @@ export function getEventGlyph(kind: string): string {
 }
 
 export function isAlertKind(kind: string): boolean {
-  return kind === 'suspected_movement' || kind === 'power_lost';
+  return kind === 'suspected_movement' || kind === 'power_lost' || kind === 'signal_lost';
 }
 
 export function getEventLabel(kind: string, t: TFunction): string {
@@ -22,6 +23,7 @@ export function getEventLabel(kind: string, t: TFunction): string {
     suspected_movement: t('events.kindSuspectedMovement'),
     battery_low: t('events.kindBatteryLow'),
     power_lost: t('events.kindPowerLost'),
+    signal_lost: t('events.kindSignalLost'),
     heartbeat: t('events.kindHeartbeat'),
     gnss_fix: t('events.kindGnssFix'),
   };

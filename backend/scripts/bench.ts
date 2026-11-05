@@ -5,6 +5,12 @@
  *       Aprovisiona un dispositivo SIN dueño (como la placa) e imprime
  *       deviceId + secret + claimCode. La ventana de pairing es corta.
  *
+ *   npx ts-node scripts/bench.ts provision-simulator [nombre]
+ *       Igual, pero marca la identidad para que solo ella acepte simulación.
+ *
+ *   npx ts-node scripts/bench.ts liveness <deviceId> <segundos|off>
+ *       Activa/desactiva la detección de silencio (60..604800 segundos).
+ *
  *   npx ts-node scripts/bench.ts claim <email> <code>
  *       Reclama el dispositivo con su claimCode y lo liga al usuario de ese
  *       email (debe haber iniciado sesion antes en la app). Presencia fisica
@@ -13,14 +19,15 @@
  *   npx ts-node scripts/bench.ts send <email> <kind>
  *       Firma un evento v2 y lo POSTea a http://localhost:3000/v1/events con la
  *       secuencia correcta (lastSeq+1). kind: suspected_movement | heartbeat |
- *       power_lost | gnss_fix | battery_low. Telemetria power incluida (v2).
+ *       power_lost | gnss_fix | battery_low. Requiere BENCH_DEVICE_ID de tipo
+ *       SIMULATOR. Telemetria power incluida (v2).
  *
  *   npx ts-node scripts/bench.ts locate <email>
  *       Crea un comando LOCATE_NOW (PENDING) llamando al servicio.
  *
  *   npx ts-node scripts/bench.ts poll <email>
  *       Poll del dispositivo (canal comandos, firmado con K_command) via
- *       POST /v1/commands/poll. Imprime los PENDING vivos.
+ *       POST /v1/commands/poll. Requiere BENCH_DEVICE_ID de tipo SIMULATOR.
  *
  *   npx ts-node scripts/bench.ts fix <email> [commandId]
  *       Envia un gnss_fix v2 con commandId (toma el PENDING mas reciente si
@@ -38,13 +45,33 @@ import { DevicesService } from '../src/devices/devices.service';
 import { RetentionService } from '../src/devices/retention.service';
 import { sign, deriveKey } from '../src/devices/protocol';
 import { decryptSecret } from '../src/devices/secret-crypto';
+import { DeviceKind } from '@prisma/client';
 
 const BASE = process.env.BENCH_BASE ?? 'http://localhost:3000';
+
+async function simulatorDevice(prisma: PrismaService, email: string) {
+  const deviceId = process.env.BENCH_DEVICE_ID;
+  if (!deviceId || !/^[A-Za-z0-9_-]{20,64}$/.test(deviceId)) {
+    throw new Error('BENCH_DEVICE_ID obligatorio (CUID/UUID de tipo SIMULATOR)');
+  }
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) throw new Error(`No hay usuario con email ${email}. Inicia sesion en la app primero.`);
+  const device = await prisma.device.findFirst({
+    where: { id: deviceId, ownerId: user.id, kind: DeviceKind.SIMULATOR },
+  });
+  if (!device) {
+    throw new Error(`${deviceId} no es un SIMULATOR propiedad de ${email}`);
+  }
+  return { user, device };
+}
 
 async function firstDevice(prisma: PrismaService, email: string) {
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) throw new Error(`No hay usuario con email ${email}. Inicia sesion en la app primero.`);
-  const device = await prisma.device.findFirst({ where: { ownerId: user.id }, orderBy: { createdAt: 'asc' } });
+  const device = await prisma.device.findFirst({
+    where: { ownerId: user.id },
+    orderBy: { createdAt: 'asc' },
+  });
   return { user, device };
 }
 
@@ -53,13 +80,14 @@ async function main() {
   const prisma = new PrismaService();
   await prisma.$connect();
   try {
-    if (cmd === 'provision') {
+    if (cmd === 'provision' || cmd === 'provision-simulator') {
       // Alta de banco/fabrica: crea SIN dueño (como la placa real). El slot de
       // email aqui es el nombre del dispositivo. Imprime secret + claimCode una
       // vez; el dueño lo reclama con `bench claim <email> <code>` (o desde app).
       const name = process.argv[3] ?? 'Vehiculo';
       const svc = new DevicesService(prisma, new RetentionService(prisma));
-      const { device, secret, claimCode } = await svc.createDevice(name);
+      const kind = cmd === 'provision-simulator' ? DeviceKind.SIMULATOR : DeviceKind.PHYSICAL;
+      const { device, secret, claimCode } = await svc.createDevice(name, kind);
       console.log('Dispositivo aprovisionado (sin dueño, en ventana de pairing).');
       console.log(`  deviceId:  ${device.id}`);
       console.log(`  secret:    ${secret}`);
@@ -68,10 +96,21 @@ async function main() {
       return;
     }
 
+    if (cmd === 'liveness') {
+      const deviceId = email;
+      if (!deviceId || !arg) throw new Error('Uso: bench liveness <deviceId> <segundos|off>');
+      const interval = arg === 'off' ? null : Number(arg);
+      const svc = new DevicesService(prisma, new RetentionService(prisma));
+      const device = await svc.configureLiveness(deviceId, interval);
+      console.log(`Liveness ${device.id}: ${device.heartbeatIntervalSec ?? 'off'}`);
+      return;
+    }
+
     if (cmd === 'claim') {
       // arg = code (argv[4]); email = argv[3]. Liga el dispositivo al dueño.
       const user = await prisma.user.findUnique({ where: { email } });
-      if (!user) throw new Error(`No hay usuario con email ${email}. Inicia sesion en la app primero.`);
+      if (!user)
+        throw new Error(`No hay usuario con email ${email}. Inicia sesion en la app primero.`);
       const svc = new DevicesService(prisma, new RetentionService(prisma));
       const device = await svc.claimDevice(arg, user.id);
       console.log(`Reclamado: ${device.id} -> ${email}`);
@@ -79,8 +118,7 @@ async function main() {
     }
 
     if (cmd === 'send' || cmd === 'fix') {
-      const { device } = await firstDevice(prisma, email);
-      if (!device) throw new Error('El usuario no tiene dispositivo. Ejecuta provision primero.');
+      const { device } = await simulatorDevice(prisma, email);
       const seq = device.lastSeq + 1;
       const now = new Date().toISOString();
       // send <email> <kind> [vehicle|reserve]: rail que alimenta el evento.
@@ -93,7 +131,8 @@ async function main() {
         kind: cmd === 'fix' ? 'gnss_fix' : arg,
         observedAtUtc: now,
         power: {
-          vehicleMv: source === 'reserve' ? 9000 : arg === 'battery_low' && cmd === 'send' ? 11200 : 13600,
+          vehicleMv:
+            source === 'reserve' ? 9000 : arg === 'battery_low' && cmd === 'send' ? 11200 : 13600,
           reserveMv: 4100,
           source,
         },
@@ -133,17 +172,17 @@ async function main() {
     }
 
     if (cmd === 'locate') {
-      const { user, device } = await firstDevice(prisma, email);
-      if (!device) throw new Error('El usuario no tiene dispositivo. Ejecuta provision primero.');
+      const { user, device } = await simulatorDevice(prisma, email);
       const svc = new DevicesService(prisma, new RetentionService(prisma));
       const command = await svc.requestLocate(device.id, user.id);
-      console.log(`locate -> ${command.id} status=${command.status} expiresAt=${command.expiresAt.toISOString()}`);
+      console.log(
+        `locate -> ${command.id} status=${command.status} expiresAt=${command.expiresAt.toISOString()}`,
+      );
       return;
     }
 
     if (cmd === 'poll') {
-      const { device } = await firstDevice(prisma, email);
-      if (!device) throw new Error('El usuario no tiene dispositivo.');
+      const { device } = await simulatorDevice(prisma, email);
       const body = Buffer.from(
         JSON.stringify({ deviceId: device.id, polledAtUtc: new Date().toISOString() }),
         'utf8',
@@ -164,8 +203,7 @@ async function main() {
     }
 
     if (cmd === 'walk') {
-      const { device } = await firstDevice(prisma, email);
-      if (!device) throw new Error('El usuario no tiene dispositivo. Ejecuta provision primero.');
+      const { device } = await simulatorDevice(prisma, email);
       const n = Number(arg ?? 5);
       let seq = device.lastSeq;
       // Camina desde la ultima posicion conocida (o Madrid centro).
@@ -214,7 +252,9 @@ async function main() {
         orderBy: { createdAt: 'desc' },
         take: 5,
       });
-      console.log(`device: state=${device.state} tripState=${device.tripState} lastSeq=${device.lastSeq}`);
+      console.log(
+        `device: state=${device.state} tripState=${device.tripState} lastSeq=${device.lastSeq}`,
+      );
       console.log(
         `power: vehicleMv=${device.lastVehicleMv ?? '-'} reserveMv=${device.lastReserveMv ?? '-'} source=${device.lastPowerSource ?? '-'}`,
       );
@@ -223,13 +263,17 @@ async function main() {
       }
       if (incidents.length === 0) console.log('  (sin incidentes)');
       for (const c of commands) {
-        console.log(`  command ${c.type} ${c.status}${c.resultEventId ? ` -> event ${c.resultEventId}` : ''}`);
+        console.log(
+          `  command ${c.type} ${c.status}${c.resultEventId ? ` -> event ${c.resultEventId}` : ''}`,
+        );
       }
       if (commands.length === 0) console.log('  (sin comandos)');
       return;
     }
 
-    console.error('Comando desconocido. Usa: provision | claim | send | locate | poll | fix | status');
+    console.error(
+      'Comando desconocido. Usa: provision | provision-simulator | liveness | claim | send | locate | poll | fix | status',
+    );
     process.exit(1);
   } finally {
     await prisma.$disconnect();

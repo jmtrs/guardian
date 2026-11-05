@@ -3,6 +3,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { apiClient } from './client';
 
 export type DeviceState = 'ARMED' | 'TRIP' | 'WORKSHOP';
+export type DeviceKind = 'PHYSICAL' | 'SIMULATOR';
 export type TripState = 'IDLE' | 'REQUESTED' | 'CONFIRMED';
 export type PowerSource = 'vehicle' | 'reserve' | 'unknown';
 
@@ -16,6 +17,7 @@ export type PowerTelemetry = {
 export type Device = {
   id: string;
   name: string;
+  kind: DeviceKind;
   // Null solo antes del claim; los devices que llegan a la app ya tienen dueño.
   ownerId: string | null;
   state: DeviceState;
@@ -23,6 +25,7 @@ export type Device = {
   workshopUntil: string | null;
   lastSeq: number;
   lastSeenAt: string | null;
+  heartbeatIntervalSec: number | null;
   lastLat: number | null;
   lastLon: number | null;
   lastFixAt: string | null;
@@ -36,7 +39,7 @@ export type Device = {
   trips?: TripAuthorization[];
 };
 
-export type IncidentKind = 'suspected_movement' | 'power_lost';
+export type IncidentKind = 'suspected_movement' | 'power_lost' | 'signal_lost';
 export type IncidentState = 'OPEN' | 'ACKNOWLEDGED' | 'CLOSED';
 
 export type Incident = {
@@ -47,7 +50,8 @@ export type Incident = {
   openedAt: string;
   acknowledgedAt: string | null;
   closedAt: string | null;
-  openedByEventSeq: number;
+  /** null cuando el watchdog del servidor detecta silencio sin un evento. */
+  openedByEventSeq: number | null;
   /** Evento que cerro por recuperacion observada (null: cierre manual/viaje). */
   closedByEventSeq: number | null;
 };
@@ -199,10 +203,13 @@ export function useDevicePositions(
   return useQuery({
     queryKey: [...deviceKeys.positions(deviceId ?? 'none'), scopeKey],
     queryFn: async () => {
-      const response = await apiClient.get<DevicePosition[]>(
-        `/v1/devices/${deviceId}/positions`,
-        { params: { limit, ...(scope?.incidentId && { incidentId: scope.incidentId }), ...(scope?.tripId && { tripId: scope.tripId }) } },
-      );
+      const response = await apiClient.get<DevicePosition[]>(`/v1/devices/${deviceId}/positions`, {
+        params: {
+          limit,
+          ...(scope?.incidentId && { incidentId: scope.incidentId }),
+          ...(scope?.tripId && { tripId: scope.tripId }),
+        },
+      });
       return response.data;
     },
     enabled: Boolean(deviceId),
@@ -255,7 +262,10 @@ export function useIncidents(deviceId: string | undefined, options?: { refetchIn
 
 // Historial de comandos (LOCATE_NOW). Mientras haya un PENDING vivo el refetch
 // es rapido: es la unica forma de ver el ACK del dispositivo (llega como fix).
-export function useDeviceCommands(deviceId: string | undefined, options?: { refetchInterval?: number }) {
+export function useDeviceCommands(
+  deviceId: string | undefined,
+  options?: { refetchInterval?: number },
+) {
   return useQuery({
     queryKey: deviceKeys.commands(deviceId ?? 'none'),
     queryFn: async () => {

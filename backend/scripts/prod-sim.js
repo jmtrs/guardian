@@ -6,11 +6,8 @@
  * va a localhost:3000 para saltar el bloqueo de UA de Cloudflare.
  *
  * Uso (dentro del contenedor, cwd = /app/backend por el node_modules):
- *   node prod-sim.js gnss_fix [n]        # n fixes desplazandose (default 3)
- *   node prod-sim.js heartbeat           # un latido (refresca lastSeen + power)
- *   node prod-sim.js suspected_movement  # abre incidente de movimiento
- *   node prod-sim.js power_lost          # abre incidente de corte
- *   node prod-sim.js battery_low         # aviso de bateria baja
+ *   SIM_DEVICE_ID=<cuid-o-uuid> node prod-sim.js gnss_fix [n]
+ *   # La misma variable es obligatoria para heartbeat/movement/power/battery.
  *
  * Requiere-solo built-ins + @prisma/client (ya en la imagen). Sin deps del repo.
  */
@@ -21,10 +18,17 @@ const ALLOWED = ['suspected_movement', 'battery_low', 'power_lost', 'heartbeat',
 const kind = process.argv[2] ?? 'gnss_fix';
 const count = kind === 'gnss_fix' ? Number(process.argv[3] ?? 3) : 1;
 const BASE = process.env.SIM_BASE ?? 'http://localhost:3000';
+const DEVICE_ID = process.env.SIM_DEVICE_ID;
 
 if (!ALLOWED.includes(kind)) {
   console.error(`kind invalido: ${kind}. Usa: ${ALLOWED.join(' | ')}`);
   process.exit(1);
+}
+if (!DEVICE_ID || !/^[A-Za-z0-9_-]{20,64}$/.test(DEVICE_ID)) {
+  throw new Error('SIM_DEVICE_ID obligatorio (CUID/UUID)');
+}
+if (!Number.isInteger(count) || count < 1 || count > 100) {
+  throw new Error('n debe ser un entero entre 1 y 100');
 }
 
 function masterKey() {
@@ -41,8 +45,13 @@ function decryptSecret(stored, key) {
 }
 function deriveEventKey(rootHex, deviceId) {
   return Buffer.from(
-    hkdfSync('sha256', Buffer.from(rootHex, 'hex'), Buffer.from(deviceId, 'utf8'),
-      Buffer.from('guardian/event/v1', 'utf8'), 32),
+    hkdfSync(
+      'sha256',
+      Buffer.from(rootHex, 'hex'),
+      Buffer.from(deviceId, 'utf8'),
+      Buffer.from('guardian/event/v1', 'utf8'),
+      32,
+    ),
   );
 }
 
@@ -59,14 +68,15 @@ async function post(deviceId, key, envelope) {
     },
     body,
   });
-  return `HTTP ${res.status} ${await res.text()}`;
+  return { status: res.status, text: await res.text() };
 }
 
 (async () => {
   const prisma = new PrismaClient();
   try {
-    const device = await prisma.device.findFirst({ orderBy: { createdAt: 'asc' } });
-    if (!device) throw new Error('no hay dispositivo');
+    const device = await prisma.device.findUnique({ where: { id: DEVICE_ID } });
+    if (!device) throw new Error(`simulador ${DEVICE_ID} no existe`);
+    if (device.kind !== 'SIMULATOR') throw new Error(`rechazado: ${DEVICE_ID} no es SIMULATOR`);
     const key = deriveEventKey(decryptSecret(device.secret, masterKey()), device.id);
     let seq = device.lastSeq;
     let lat = device.lastLat ?? 40.4168;
@@ -88,14 +98,27 @@ async function post(deviceId, key, envelope) {
       if (kind === 'gnss_fix') {
         lat += 0.0016 * (i % 2 === 0 ? 1 : 0.6);
         lon += 0.0022;
-        envelope.position = { lat: Number(lat.toFixed(6)), lon: Number(lon.toFixed(6)), fixAtUtc: now };
+        envelope.position = {
+          lat: Number(lat.toFixed(6)),
+          lon: Number(lon.toFixed(6)),
+          fixAtUtc: now,
+        };
       }
       const result = await post(device.id, key, envelope);
-      const where = kind === 'gnss_fix' ? ` lat=${envelope.position.lat} lon=${envelope.position.lon}` : '';
-      console.log(`${kind} ${i + 1}/${count} seq=${seq}${where} -> ${result}`);
+      const where =
+        kind === 'gnss_fix' ? ` lat=${envelope.position.lat} lon=${envelope.position.lon}` : '';
+      console.log(
+        `${kind} ${i + 1}/${count} seq=${seq}${where} -> HTTP ${result.status} ${result.text}`,
+      );
+      if (result.status < 200 || result.status >= 300) {
+        throw new Error(`ingesta rechazada en seq=${seq}; no se enviarán más eventos`);
+      }
       if (count > 1) await new Promise((r) => setTimeout(r, 800));
     }
   } finally {
     await prisma.$disconnect();
   }
-})().catch((e) => { console.error(String((e && e.message) || e)); process.exit(1); });
+})().catch((e) => {
+  console.error(String((e && e.message) || e));
+  process.exit(1);
+});

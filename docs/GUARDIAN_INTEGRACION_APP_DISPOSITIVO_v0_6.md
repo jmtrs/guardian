@@ -297,7 +297,7 @@ El dispositivo pertenece a la **cuenta**, no al teléfono: entrar con el mismo e
 - Sin firmware (hoy): el canal HMAC (`K_root`) puede sobrevivir al release; el corte real de acceso del dueño antiguo es `ownerId null` + purga. Suficiente mientras el único provisioning sea de banco.
 - Sin bloqueos permanentes ni contadores de por vida: el límite del claim (fuerza bruta del código) ya existe y vale igual para el nuevo dueño.
 
-No se implementa aún. Cuando se haga: endpoint + botón en Ajustes de la app con confirmación, nada más.
+No se implementa aún. Cuando se haga: endpoint + botón en Ajustes de la app con confirmación, nada más. **Antes de implementarlo, leer [GUARDIAN v0.7 §3.1/§5](GUARDIAN_CICLO_DE_VIDA_Y_MODELO_DUAL_v0_7.md):** endurece este release con el orden atómico obligatorio (inreclamable → purga → nuevo claimCode), el reset de `seq` (`lastSeq=0`) para no brickear al nuevo dueño, el fallback de step-up OTP sin email en self-host, y la rotación de K_root para que la reventa sea segura.
 
 ### Primer movimiento del propietario
 

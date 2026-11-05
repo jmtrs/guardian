@@ -13,7 +13,8 @@ import type { Auth } from './auth.config';
 export class AuthController {
   constructor(@Inject(AUTH_INSTANCE) private readonly auth: Auth) {}
 
-  // '*' a secas: '*path' no cubre rutas multi-segmento con path-to-regexp 0.1.x.
+  // Nest conserva compatibilidad para `*` sobre Express 5; debe cubrir las
+  // rutas multi-segmento de Better Auth. `smoke:built` lo prueba en Node real.
   @All('*')
   async handle(@Req() req: Request, @Res() res: Response): Promise<void> {
     const url = `http://${req.get('host') ?? 'localhost'}${req.originalUrl}`;

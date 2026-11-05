@@ -1,6 +1,6 @@
 # Guardian
 
-Vigilante personal independiente para un vehículo antiguo de 12 V: movimiento, batería principal, ubicación y alertas. **Estado actual: app móvil + backend + banco de software funcionales; dispositivo físico todavía no integrado.** No existen aún firmware ESP32 real, LTE/GNSS físico validado, autorización BLE ni circuito de alimentación automotriz probado. **No instalar este prototipo en el vehículo.**
+Vigilante personal independiente para un vehículo antiguo de 12 V: movimiento, batería principal, ubicación y alertas. **Estado actual: app, backend, bring-up ESP32/LTE/GNSS y banco de consumo funcionales; el dominio del ciclo productivo ya tiene outbox y pruebas host, pero faltan sus adapters de placa.** No existen aún autorización BLE ni circuito de alimentación automotriz validado. **No instalar este prototipo en el vehículo.**
 
 ## App (monorepo `backend/` + `mobile/`)
 
@@ -29,6 +29,8 @@ cd backend && npx ts-node scripts/bench.ts provision "Sim"
 - **[Mapa de conexión del sistema (las 5 capas)](docs/MAPA_CONEXION_SISTEMA.md)**. Punto de entrada único: hardware → firmware → contrato → backend → app, con el recorrido de un dato de punta a punta y dónde vive cada pieza. Empieza por aquí para conectar cualquier capa nueva.
 - **[Contrato dispositivo ↔ backend v0.6](docs/CONTRATO_DISPOSITIVO_v0_6.md)**. Fuente de verdad del cable: claves HKDF, firma HMAC, esquema de evento (`schemaVersion: 2`), telemetría `power`, anti-replay, poll de comandos y `LOCATE_NOW`. Sin legacy: un único contrato, fail-closed.
 - **[GUARDIAN v0.6: integración app, dispositivo, seguridad y energía](docs/GUARDIAN_INTEGRACION_APP_DISPOSITIVO_v0_6.md)**. Arquitectura objetivo desde el estado real de la app/backend actuales: autoridad del dispositivo, autorización BLE, localización remota, command queue, wake condicionado al consumo y banco de potencia.
+- **[GUARDIAN v0.7: ciclo de vida del dispositivo y modelo dual](docs/GUARDIAN_CICLO_DE_VIDA_Y_MODELO_DUAL_v0_7.md)**. Ciclo de vida completo (aprovisionamiento → claim → release → traspaso → migración), modelo de negocio dual y gates previos a fabricar. El watchdog de silencio ya está implementado; rotación de K_root, reset de secuencia, reloj GNSS y GDPR siguen abiertos.
+- **[Red anónima de guardianes v0.1](docs/GUARDIAN_RED_ANONIMA_v0_1.md)**. Localización colaborativa cifrada de extremo a extremo al estilo Find My/AirTag, solo entre devices Guardian (el móvil como finder está descartado): relé de ubicación, corroboración de jamming (watchdog F6 × baliza viva, en cliente) y mapa de calor de robos agregado. Cripto de servidor ciego derivada de K_root; anti-stalking cerrado por co-presencia en movimiento (la ubicación sigue al conductor) con estado de préstamo/taller y detectabilidad DULT. Diseño, no implementación.
 - **[GUARDIAN v0.5: diseño personal, arquitectura y pantallas](docs/GUARDIAN_DISENO_PERSONAL_v0_5.md)**. Diseño funcional previo; v0.6 lo complementa y corrige donde la app ya ha avanzado.
 - **[Alimentación y reserva para meses en el vehículo](docs/hardware/ALIMENTACION_Y_RESERVA.md)**. Decisión de mantener una única 18650 en la LILYGO **si** se verifica protección térmica real de carga, selección de celda, consumo y protección del vehículo. Es una especificación pendiente de ensayo, no una instalación validada.
 - **[Esquema eléctrico LILYGO V1.4, fuente oficial y lectura de la página de carga](docs/hardware/ESQUEMA_T_A7670X_V1_4.md)**. Enlaza al PDF del fabricante y documenta el circuito `CN3065`, `TEMP` y el puente `N9`; la coincidencia con nuestra unidad **R2** debe comprobarse físicamente.
@@ -63,7 +65,7 @@ Contra el backend real (aprovisiona con el banco, ver
 
 ```bash
 make db-start && make db-migrate && make dev-backend &
-cd backend && npx ts-node scripts/bench.ts provision "Sim"   # imprime deviceId + secret + claimCode
+cd backend && npx ts-node scripts/bench.ts provision-simulator "Sim" # deviceId + secret + claimCode
 npx ts-node scripts/bench.ts claim <tu-email> <claimCode>    # reclama (o desde la app)
 export GUARDIAN_DEVICE_ID=...  GUARDIAN_DEVICE_SECRET_HEX=...  # lo que imprimió provision
 python3 -m guardian.simulator heartbeat            # HTTP 202 aceptado
@@ -76,15 +78,20 @@ La secuencia se persiste en un fichero local (análogo a la NVS de la placa) y
 solo avanza tras un `202`. No exponer el backend local a Internet ni reutilizar
 secretos de banco en hardware real.
 
+Las identidades creadas antes de existir `DeviceKind` migran de forma segura a
+`PHYSICAL`: no se reclasifican en masa. Retira sus secretos de simulación y crea
+una identidad nueva con `provision-simulator`. Los comandos `send`, `fix`,
+`locate`, `poll` y `walk` de `bench.ts` exigen además
+`BENCH_DEVICE_ID=<id SIMULATOR>` para no tocar por accidente la secuencia de una
+placa física.
+
 ## Próximos pasos
 
 El orden de implementación y los gates están definidos en **[GUARDIAN v0.6](docs/GUARDIAN_INTEGRACION_APP_DISPOSITIVO_v0_6.md)**. En resumen:
 
-1. verificar físicamente la T-A7670E, LTE, GNSS y pinout;
-2. conectar LIS3DH y confirmar wake por interrupción;
-3. implementar firmware mínimo con TLS, eventos firmados y persistencia;
-4. medir deep sleep, LTE sleep, LTE TX y LTE + GNSS con ESP32-S3 + INA219;
-5. implementar autorización BLE y hacer que Guardian físico confirme inicio/fin de viaje;
-6. añadir `LOCATE_NOW` y cola de comandos segura;
-7. probar remote wake solo si respeta el presupuesto energético;
-8. cerrar UVLO, conversor, reserva y protección térmica antes de instalar en el vehículo.
+1. implementar los adapters ESP-IDF del ciclo productivo y de su outbox NVS;
+2. emitir heartbeat, movimiento y `LOCATE_NOW` desde ese ciclo;
+3. medir P4 y P5 y explicar los ~15 mA extra de P2b;
+4. validar en placa la configuración de Secure Boot v2, flash y NVS cifradas;
+5. implementar autorización BLE y confirmación física de viaje;
+6. cerrar UVLO, conversor, reserva y protección térmica antes de instalar.

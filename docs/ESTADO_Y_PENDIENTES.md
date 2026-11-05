@@ -85,7 +85,9 @@ sería viable si se explican los ~15 mA de más del módem en sleep.
 ## Pendiente
 
 ### Seguridad, antes de que una placa salga del banco
-- [ ] **Cifrado de flash + NVS y secure boot.** Hoy `K_root` está en flash en claro.
+- [ ] **Cifrado de flash + NVS y secure boot.** Plantilla y gate read-only en
+      `firmware/production/`; falta el target productivo y validarlo en una
+      placa designada. `K_root` del bring-up sigue en claro.
 - [ ] **Aprovisionamiento de fábrica.** Hoy `!provision` por consola, que hace
       eco de lo tecleado. Falta una herramienta que no lo muestre.
 - [ ] **Hora autenticada.** NTP no está autenticado. Hoy solo alimenta
@@ -93,17 +95,20 @@ sería viable si se explican los ~15 mA de más del módem en sleep.
       con la hora GNSS.
 - [ ] Mantener el paquete de CA (`firmware/bringup/certs/README.md`).
 
-### Firmware de producción (el siguiente gran bloque; diseño antes de código)
-- [ ] Máquina de estados: dormido (P1 o P2 según la energía disponible),
-      despertar por movimiento, aviso, vuelta a dormir.
+### Firmware de producción
+- [x] Dominio host de la máquina de estados: boot/wake → outbox → motion →
+      comandos → GNSS/heartbeat → arm → sleep (`guardian-device`).
+- [ ] Composition root y adapters ESP-IDF de esa máquina en la LILYGO.
 - [ ] `suspected_movement` con debounce y backoff (contrato §8).
-- [ ] GNSS → `gnss_fix` con `position` (falta medir P4).
+- [x] Encoder `gnss_fix` con posición validada y `commandId` opcional.
+- [ ] Adapter GNSS productivo y medida P4.
 - [ ] Poll de comandos con `K_command` en cada despertar; `LOCATE_NOW` con
       timeout finito.
 - [ ] Latido periódico para el watchdog de silencio del backend (prioridad
       según v0.7).
-- [ ] Bandeja de salida persistente: un evento conserva su secuencia y se
-      reenvía con los mismos bytes hasta 202/409.
+- [x] Dominio de bandeja: persiste bytes+secuencia antes de red, bloquea
+      sobrescritura y reenvía exactamente hasta 202/409.
+- [ ] Adapter NVS cifrado y prueba de corte eléctrico durante escritura/envío.
 - [ ] `power`: medir el rail de 12 V y decidir `source` (hoy `reserve` fijo).
 - [ ] Tolerar la transición VBUS/12 V → batería (el módem se reinicia).
 - [ ] Mantener `POWER_EN` durante un reset del ESP32.
@@ -123,6 +128,9 @@ sería viable si se explican los ~15 mA de más del módem en sleep.
       [alimentación y reserva](hardware/ALIMENTACION_Y_RESERVA.md).
 
 ### Backend y app
+- [x] Watchdog server-side de silencio + incidente `signal_lost` en la app.
+- [x] Identidad `PHYSICAL`/`SIMULATOR`; scripts de producción exigen un
+      simulador explícito y nunca avanzan la secuencia de una placa física.
 - [ ] **Verificar `aggc.dev` en Resend** y volver a `EMAIL_FROM=Guardian <noreply@aggc.dev>`.
       Hoy se envía desde `onboarding@resend.dev`, que solo entrega al dueño de
       la cuenta de Resend.

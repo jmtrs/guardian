@@ -33,6 +33,10 @@ pub enum ProtocolError {
     Sequence,
     /// A millivolt reading above 60000, the backend's limit.
     Millivolts,
+    /// A GNSS event had no valid coordinates.
+    Position,
+    /// Command id empty, too long, or with unsafe characters.
+    CommandId,
     /// Encoded body larger than [`envelope::MAX_BODY`].
     TooLong,
 }
@@ -45,6 +49,8 @@ impl fmt::Display for ProtocolError {
             Self::Time => "invalid time",
             Self::Sequence => "sequence out of range",
             Self::Millivolts => "millivolts out of range",
+            Self::Position => "invalid or missing position",
+            Self::CommandId => "invalid command id",
             Self::TooLong => "body too long",
         })
     }

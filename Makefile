@@ -1,7 +1,7 @@
 # Guardian Makefile
 # Cross-platform: delegates to Node.js scripts for Windows compatibility
 
-.PHONY: help setup dev dev-backend dev-mobile test test-backend test-mobile test-firmware build lint typecheck db-start db-stop db-migrate db-deploy db-studio db-generate deploy deploy-backend sync status clean sim-prod
+.PHONY: help setup dev dev-backend dev-mobile test test-backend test-mobile test-python test-firmware build lint typecheck audit-prod db-start db-stop db-migrate db-deploy db-studio db-generate deploy deploy-backend sync status clean sim-prod
 
 help:
 	@echo "Guardian - Available Commands"
@@ -17,9 +17,11 @@ help:
 	@echo "    make test           Run all tests"
 	@echo "    make test-backend   Run backend tests"
 	@echo "    make test-mobile    Run mobile tests"
+	@echo "    make test-python    Run Python tests"
 	@echo "    make test-firmware  Run firmware core + driver host tests"
 	@echo "    make lint           Lint all packages"
 	@echo "    make typecheck      Typecheck all packages"
+	@echo "    make audit-prod     Fail on high/critical production dependency advisories"
 	@echo ""
 	@echo "  Build and Deploy:"
 	@echo "    make build          Build all packages"
@@ -36,7 +38,7 @@ help:
 	@echo "  Utilities:"
 	@echo "    make status         Show git status and project info"
 	@echo "    make clean          Clean build artifacts and node_modules"
-	@echo "    make sim-prod       Simulate device events against PROD (KIND=gnss_fix N=3)"
+	@echo "    make sim-prod       Simulate against PROD (requires SIM_DEVICE_ID of a SIMULATOR)"
 
 # ============================================
 # Setup & Development
@@ -58,24 +60,31 @@ dev-mobile:
 # Testing & Quality
 # ============================================
 
-test: test-backend test-mobile test-firmware
+test: test-backend test-mobile test-python test-firmware
 
 test-backend:
 	@pnpm run test:backend
 
 test-mobile:
-	@pnpm run test:mobile || true
+	@pnpm run test:mobile
+
+test-python:
+	@pnpm run test:python
 
 test-firmware:
 	@cd firmware/guardian-protocol && cargo test
 	@cd firmware/guardian-core && cargo test
 	@cd firmware/guardian-drivers && cargo test
+	@cd firmware/guardian-device && cargo test
 
 lint:
 	@pnpm run lint
 
 typecheck:
-	@pnpm run typecheck || true
+	@pnpm run typecheck
+
+audit-prod:
+	@pnpm run audit:prod
 
 # ============================================
 # Build & Deploy
@@ -135,9 +144,9 @@ clean:
 
 # Empuja eventos v2 al backend de prod para probar la app en vivo. El K_root no
 # sale del homelab (ver backend/scripts/prod-sim.sh). Ejemplos:
-#   make sim-prod                       # 3 gnss_fix moviendose
-#   make sim-prod KIND=heartbeat        # un latido
-#   make sim-prod KIND=gnss_fix N=6     # 6 fixes
+#   make sim-prod SIM_DEVICE_ID=<id>                       # 3 gnss_fix
+#   make sim-prod SIM_DEVICE_ID=<id> KIND=heartbeat        # un latido
+#   make sim-prod SIM_DEVICE_ID=<id> KIND=gnss_fix N=6     # 6 fixes
 KIND ?= gnss_fix
 N ?= 3
 sim-prod:

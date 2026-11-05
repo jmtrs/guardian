@@ -1,0 +1,20 @@
+[package]
+name = "guardian-device"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.84"
+description = "Production Guardian device cycle and durable event outbox."
+license = "UNLICENSED"
+publish = false
+
+[dependencies]
+guardian-core = { path = "../guardian-core" }
+guardian-protocol = { path = "../guardian-protocol" }
+
+[lints.rust]
+missing_docs = "deny"
+unsafe_code = "forbid"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"

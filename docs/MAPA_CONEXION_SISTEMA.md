@@ -154,6 +154,39 @@ contrato — es la referencia ejecutable de lo que la placa debe hacer.
 
 ---
 
+## 7. Ciclo de vida y modelo de negocio (transversal)
+
+Las cinco capas describen cómo circula un dato. El **ciclo de vida** de un
+dispositivo (aprovisionamiento → claim → release → traspaso → migración) y el
+**modelo dual** (managed vs self-host) cruzan todas las capas y viven en
+[`GUARDIAN_CICLO_DE_VIDA_Y_MODELO_DUAL_v0_7.md`](GUARDIAN_CICLO_DE_VIDA_Y_MODELO_DUAL_v0_7.md).
+Ahí están además los huecos de ingeniería a cerrar antes de fabricar, con
+evidencia en código: watchdog de silencio (prioridad 0 del anti-robo), rotación
+de K_root en reventa, reset atómico de secuencia, reloj GNSS autoritativo y
+GDPR. Leerlo antes de tocar release, provisioning, self-host o el firmware de
+identidad.
+
+---
+
+## 8. Red anónima de guardianes (transversal, diseño)
+
+Una capa colaborativa opcional sobre las cinco: cada Guardian sirve de "finder"
+para los demás —los propios devices ya son finders móviles porque van en vehículos
+que circulan; el móvil con la app está descartado como finder—, de modo que un
+vehículo cuyo device se queda sin enlace propio sigue siendo localizable. Es
+localización cifrada de
+extremo a extremo al estilo Find My/AirTag y vive en
+[`GUARDIAN_RED_ANONIMA_v0_1.md`](GUARDIAN_RED_ANONIMA_v0_1.md). Cruza todas las
+capas: baliza BLE derivada de K_root (capa contrato/firmware), reportes ciegos
+al backend, descifrado y corroboración de jamming en la app (watchdog F6 ×
+baliza viva). El problema real no es la cripto sino la densidad de finders.
+Anti-stalking vs anti-robo está **cerrado en diseño** (G1: dos gates +
+co-presencia en movimiento + viaje de activación); quedan como huecos abiertos
+metadatos del finder (G2), anti-Sybil (G3), endurecer el ingest del relé (G7) y
+el key schedule por estado para DULT. Diseño, nada implementado.
+
+---
+
 > Si este documento y el código discrepan, **manda el código**; luego se corrige
 > el documento. Fuentes de verdad ejecutables: `backend/src/devices/` y
 > `mobile/src/api/devices.ts`.

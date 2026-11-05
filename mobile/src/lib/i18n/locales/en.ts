@@ -114,6 +114,7 @@ export const en: Translation = {
     kindSuspectedMovement: 'Suspected movement',
     kindBatteryLow: 'Low battery',
     kindPowerLost: 'Power lost',
+    kindSignalLost: 'Device signal lost',
     kindHeartbeat: 'Heartbeat',
     kindGnssFix: 'GNSS fix',
   },
