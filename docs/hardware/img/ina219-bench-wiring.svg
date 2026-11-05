@@ -3,9 +3,9 @@
      ESP32-S3 while the T-A7670E sleeps. Pin order from the unit-1 photos.
      Battery − goes to the holder's − contact, not to GND: the board's DW06D
      protection sits between them and must stay in circuit. -->
-<svg xmlns="http://www.w3.org/2000/svg" width="1360" height="860" viewBox="0 0 1360 860"
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="860" viewBox="0 0 1400 860"
      font-family="Helvetica, Arial, sans-serif">
-  <rect width="1360" height="860" fill="#fff"/>
+  <rect width="1400" height="860" fill="#fff"/>
   <text x="650" y="36" text-anchor="middle" font-size="26" font-weight="bold">Banco de consumo: 18650 → INA219 → T-A7670E</text>
   <text x="650" y="58" text-anchor="middle" font-size="14" fill="#555">El INA219 mide toda la corriente que sale de la batería. Lo lee el ESP32-S3, que sigue despierto mientras la LILYGO duerme.</text>
   <text x="680" y="840" text-anchor="middle" font-size="15" font-weight="bold" fill="#c00">La celda va FUERA del portapilas. Su − va al contacto − del portapilas para que la protección DW06D de la placa siga actuando.</text>
@@ -49,11 +49,13 @@
     </g>
     <circle cx="1215" cy="110" r="8" fill="#c9a43a"/>
     <circle cx="1186" cy="230" r="8" fill="#c9a43a"/>
+    <circle cx="780" cy="230" r="8" fill="#c9a43a"/>
+    <circle cx="809" cy="230" r="8" fill="#c9a43a"/>
     <circle cx="790" cy="158" r="9" fill="#c9a43a"/>
     <text x="808" y="163" text-anchor="start" fill="#ffd34d" font-size="11" font-weight="bold">− portapilas</text>
     <text x="780" y="132">V3V3</text><text x="1186" y="132">IO12</text>
     <text x="1215" y="132" fill="#ffd34d" font-size="11" font-weight="bold">V_BAT</text>
-    <text x="780" y="218">TX</text><text x="1157" y="218">RST</text><text x="1215" y="218">VBUS</text>
+    <text x="780" y="218" fill="#ffd34d" font-size="11" font-weight="bold">TX</text><text x="809" y="218" fill="#ffd34d" font-size="11" font-weight="bold">RX</text><text x="1157" y="218">RST</text><text x="1215" y="218">VBUS</text>
     <text x="1186" y="218" fill="#ffd34d" font-size="11" font-weight="bold">GND</text>
   </g>
   <text x="1250" y="104" font-size="12" fill="#333">fila sup. 16.º</text>
@@ -61,13 +63,15 @@
 
   <!-- ESP32-S3 -->
   <rect x="820" y="430" width="280" height="170" rx="10" fill="#333"/>
-  <text x="990" y="505" text-anchor="middle" font-size="16" fill="#ddd">ESP32-S3</text>
-  <text x="990" y="527" text-anchor="middle" font-size="12" fill="#aaa">(USB al Mac)</text>
+  <text x="990" y="545" text-anchor="middle" font-size="16" fill="#ddd">ESP32-S3</text>
+  <text x="990" y="565" text-anchor="middle" font-size="12" fill="#aaa">(USB al Mac)</text>
   <g font-size="14" fill="#fff">
     <circle cx="835" cy="460" r="8" fill="#c9a43a"/><text x="852" y="465">GPIO8</text>
     <circle cx="835" cy="495" r="8" fill="#c9a43a"/><text x="852" y="500">GPIO9</text>
     <circle cx="835" cy="530" r="8" fill="#c9a43a"/><text x="852" y="535">3V3</text>
     <circle cx="835" cy="565" r="8" fill="#c9a43a"/><text x="852" y="570">GND</text>
+    <circle cx="1085" cy="460" r="8" fill="#c9a43a"/><text x="1068" y="465" text-anchor="end">GPIO18</text>
+    <circle cx="1085" cy="495" r="8" fill="#c9a43a"/><text x="1068" y="500" text-anchor="end">GPIO17</text>
   </g>
 
   <!-- ground rail -->
@@ -85,6 +89,8 @@
     <polyline points="585,400 760,400 760,460 835,460" stroke="#2a6fe0" stroke-width="5"/>
     <polyline points="585,435 740,435 740,495 835,495" stroke="#e0b800" stroke-width="5"/>
     <polyline points="585,505 720,505 720,530 835,530" stroke="#c03030" stroke-width="5"/>
+    <polyline points="780,230 780,300 1140,300 1140,460 1085,460" stroke="#00a0a0" stroke-width="5"/>
+    <polyline points="809,230 809,280 1160,280 1160,495 1085,495" stroke="#d040a0" stroke-width="5"/>
   </g>
   <g font-size="15" font-weight="bold">
     <text x="300" y="192" fill="#e02020">1</text>
@@ -96,6 +102,8 @@
     <text x="680" y="394" fill="#2a6fe0">7</text>
     <text x="680" y="429" fill="#b39000">8</text>
     <text x="650" y="499" fill="#c03030">9</text>
+    <text x="960" y="294" fill="#00a0a0">10</text>
+    <text x="960" y="274" fill="#d040a0">11</text>
   </g>
 
   <!-- legend -->
@@ -112,5 +120,8 @@
     <text x="880" y="765">7  INA219 Sda → S3 GPIO8</text>
     <text x="880" y="785">8  INA219 Scl → S3 GPIO9</text>
     <text x="880" y="805">9  INA219 Vcc → S3 3V3</text>
+    <text x="1120" y="745" font-weight="bold">Consola (dupont):</text>
+    <text x="1120" y="765" fill="#00a0a0">10 LILYGO TX → S3 GPIO18</text>
+    <text x="1120" y="785" fill="#d040a0">11 LILYGO RX → S3 GPIO17</text>
   </g>
 </svg>

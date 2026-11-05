@@ -41,6 +41,7 @@ INA219) mide P1–P5. El firmware de producción reutilizará `guardian-core` y
  ├── console.rs   consola UART0 + Stdout: fmt::Write
  └── main.rs      composition root: cablea y entra en el bucle
  power-bench (xtensa-esp32s3-espidf, std)
+ ├── link.rs      puente USB ⇄ consola de la LILYGO (UART1, GPIO17/18), comandos `~`
  └── main.rs      composition root: I²C GPIO8/9 → Ina219 → PowerWindow → USB
 ```
 
@@ -155,8 +156,18 @@ Una línea por segundo:
 t=   12s  I    45.31 mA  min    44.90  max   120.00  V 3.781 V  avg    46.02 mA  Q 0.152 mAh
 ```
 
-`I`/`min`/`max`: último segundo. `avg` y `Q`: desde el arranque del S3 (pulsar
-RST para empezar una medida nueva). `V`: tensión que llega a la LILYGO.
+`I`/`min`/`max`: último segundo. `avg` y `Q`: desde el arranque del S3 o el
+último `~reset`. `V`: tensión que llega a la LILYGO.
+
+**Consola de la LILYGO a través del S3** (cables 10 y 11): con su USB
+desconectado, las líneas escritas al S3 van a la LILYGO (`!sleep`, `!modem on`,
+…) y su salida vuelve con el prefijo `| `, intercalada con las lecturas. Las
+líneas que empiezan por `~` son del banco: `~reset` reinicia `avg`/`Q` para
+medir la carga de un evento, `~help` las lista.
+
+**Cables de potencia (1, 2, 3) gruesos, cortos y soldados.** El LTE pide picos
+de ~2 A: con 0,6 Ω de dupont y protoboard (medido en la unidad 1) caen más de
+1 V y la placa se reinicia o la protección corta la batería.
 
 ## Supuestos a verificar en banco
 
