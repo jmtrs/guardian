@@ -4,7 +4,8 @@ Firmware de la **LILYGO T-A7670E (ESP32 + SIMCom A7670E)** en Rust, sobre
 ESP-IDF v5.4.2 (`esp-idf-svc`). La pieza actual es la herramienta de banco
 **bring-up**, que cubre los pasos 1–4 de
 [COMPONENTES.md](../docs/COMPONENTES.md#primera-secuencia-al-recibir-las-piezas)
-y la medida P1. El firmware de producción reutilizará `guardian-core` y
+y la medida P1. El **banco de consumo** (`power-bench`, un ESP32-S3 que lee un
+INA219) mide P1–P5. El firmware de producción reutilizará `guardian-core` y
 `guardian-drivers`.
 
 ## Por qué Rust y dónde
@@ -22,11 +23,13 @@ y la medida P1. El firmware de producción reutilizará `guardian-core` y
  guardian-core (no_std, forbid(unsafe))
  ├── accel.rs     Accel, Threshold (newtype: solo existe ya acotado)
  ├── command.rs   parser de consola, pureza total
- ├── ports.rs     traits: Modem · MotionSensor · Platform   (salida = fmt::Write)
+ ├── power.rs     PowerWindow: media ponderada por tiempo, extremos, carga (µAh)
+ ├── ports.rs     traits: Modem · MotionSensor · Platform · PowerMeter   (salida = fmt::Write)
  └── bringup/     casos de uso: identify, gnss, selftest, watch, sleep_until_motion
           ▲ implementan
  guardian-drivers (no_std, embedded-hal 1.0)
  ├── lis3dh.rs    Lis3dh<I2c, InputPin, DelayNs>: MotionSensor
+ ├── ina219.rs    Ina219<I2c>: PowerMeter (shunt crudo, sin registro de calibración)
  └── at.rs        LineFramer + final_result (lado puro del módem)
           ▲ usan
  bringup (xtensa-esp32-espidf, std)
@@ -37,18 +40,20 @@ y la medida P1. El firmware de producción reutilizará `guardian-core` y
  ├── wiring.rs    niveles SDA/SCL antes del I²C: ¿llega cada cable?
  ├── console.rs   consola UART0 + Stdout: fmt::Write
  └── main.rs      composition root: cablea y entra en el bucle
+ power-bench (xtensa-esp32s3-espidf, std)
+ └── main.rs      composition root: I²C GPIO8/9 → Ina219 → PowerWindow → USB
 ```
 
 Reglas:
 - `guardian-core` no depende de nada.
 - `guardian-drivers` depende solo del core y de `embedded-hal`.
-- Solo `bringup` conoce ESP-IDF.
-- Ningún archivo pasa de 300 líneas. `missing_docs = "deny"` y clippy `pedantic` en los tres crates.
+- Solo `bringup` y `power-bench` conocen ESP-IDF.
+- Ningún archivo pasa de 300 líneas. `missing_docs = "deny"` y clippy `pedantic` en todos los crates.
 
 ## Tests (sin placa)
 
 ```bash
-make test-firmware          # core (28) + drivers (17)
+make test-firmware          # core (38) + drivers (25)
 ```
 
 Los drivers verifican el tráfico I²C exacto: la receta de interrupción AN3308,
@@ -57,13 +62,14 @@ LIS3DSH.
 
 CI:
 - `firmware-host`: fmt, clippy y test de core y drivers.
-- `firmware-esp32`: clippy y build para `xtensa-esp32-espidf`.
+- `firmware-esp32`: clippy y build de `bringup` (`xtensa-esp32-espidf`) y
+  `power-bench` (`xtensa-esp32s3-espidf`).
 
 ## Toolchain (una vez)
 
 ```bash
 cargo install espup ldproxy espflash --locked
-espup install --targets esp32       # Rust fork para Xtensa → ~/export-esp.sh
+espup install --targets esp32,esp32s3   # Rust fork para Xtensa → ~/export-esp.sh
 ```
 
 `esp-idf-sys` descarga y compila ESP-IDF v5.4.2 (fijado en
@@ -122,6 +128,35 @@ sensor pierde alimentación, la línea flota: la placa despierta en bucle o
 | `AT...` | — | cualquier línea sin `!` va tal cual al módem |
 
 Umbral por defecto 80 mg, rango 16–2032 mg (pasos de 16 mg a ±2 g).
+
+## Banco de consumo (P1–P5)
+
+![Banco de consumo](../docs/hardware/img/ina219-bench-wiring.png)
+
+Un ESP32-S3 aparte lee un INA219 en serie con la batería de la LILYGO. Sigue
+midiendo mientras la LILYGO duerme.
+
+- **La celda va fuera del portapilas.** Su − va al contacto − del portapilas,
+  no a GND: la protección DW06D de la placa está entre los dos y debe seguir en
+  el circuito (y su consumo cuenta en P1).
+- **USB-C de la LILYGO desconectado** al medir: si no, se alimenta por USB.
+- Rango ±3,2 A, resolución 0,1 mA (shunt 0,1 Ω). Para P1 (µA), contrastar con
+  el multímetro en serie.
+
+```bash
+. ~/export-esp.sh
+cd firmware/power-bench
+cargo run --release            # puerto /dev/cu.usbmodem* (USB nativo del S3)
+```
+
+Una línea por segundo:
+
+```text
+t=   12s  I    45.31 mA  min    44.90  max   120.00  V 3.781 V  avg    46.02 mA  Q 0.152 mAh
+```
+
+`I`/`min`/`max`: último segundo. `avg` y `Q`: desde el arranque del S3 (pulsar
+RST para empezar una medida nueva). `V`: tensión que llega a la LILYGO.
 
 ## Supuestos a verificar en banco
 

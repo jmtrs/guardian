@@ -49,24 +49,31 @@ jobs:
           RUSTDOCFLAGS: -D warnings
 
   firmware-esp32:
-    name: Firmware bring-up (xtensa-esp32-espidf)
+    name: Firmware ${{ matrix.crate }} (${{ matrix.chip }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - crate: bringup
+            chip: esp32
+          - crate: power-bench
+            chip: esp32s3
     defaults:
       run:
-        working-directory: firmware/bringup
+        working-directory: firmware/${{ matrix.crate }}
     steps:
       - uses: actions/checkout@v4
       - uses: esp-rs/xtensa-toolchain@v1.6
         with:
           default: true
-          buildtargets: esp32
+          buildtargets: ${{ matrix.chip }}
           ldproxy: true
       - uses: actions/cache@v4
         with:
           path: |
             ~/.espressif
-            firmware/bringup/target
-          key: esp32-${{ hashFiles('firmware/**/Cargo.toml', 'firmware/bringup/sdkconfig.defaults') }}
+            firmware/${{ matrix.crate }}/target
+          key: ${{ matrix.chip }}-${{ hashFiles('firmware/**/Cargo.toml', format('firmware/{0}/sdkconfig.defaults', matrix.crate)) }}
       - run: cargo clippy --release -- -D warnings
       - run: cargo build --release
 
