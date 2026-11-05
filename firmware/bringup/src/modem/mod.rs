@@ -33,6 +33,7 @@ const BOOT_WAIT: Duration = Duration::from_secs(3);
 const AT_PROBE: Duration = Duration::from_secs(1);
 const CPOF_TIMEOUT: Duration = Duration::from_secs(5);
 const SHUTDOWN_WAIT: Duration = Duration::from_secs(2);
+const CSCLK_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// GPIO lines from the MCU to the modem.
 pub struct ModemPins<E, K, R, D> {
@@ -141,7 +142,18 @@ impl A7670 {
         self.pwrkey.set_low()?;
         self.set_reset(false)?;
         self.dtr.set_low()?;
-        hold::park_low(self.pads[TX])?;
+        hold::park(self.pads[TX], false)?;
+        self.pads.into_iter().try_for_each(hold::hold)
+    }
+
+    /// Supply on, control lines idle, DTR high (sleep allowed), TX idle
+    /// high, then latch all pads. `AT+CSCLK=1` must already be set.
+    fn try_standby(&mut self) -> Result<(), EspError> {
+        self.pwrkey.set_low()?;
+        self.set_reset(false)?;
+        self.power_enable.set_high()?;
+        self.dtr.set_high()?;
+        hold::park(self.pads[TX], true)?;
         self.pads.into_iter().try_for_each(hold::hold)
     }
 
@@ -210,6 +222,20 @@ impl Modem for A7670 {
         self.try_park().map_err(|e| {
             log::error!("cannot park modem lines for sleep: {e}");
             self.rollback_park();
+            Error::Io
+        })
+    }
+
+    fn park_in_standby(&mut self) -> Result<(), Error> {
+        // DTR-controlled sleep: the modem sleeps only while DTR is high, so a
+        // wake (DTR low again in `new`) is deterministic.
+        self.command("AT+CSCLK=1", CSCLK_TIMEOUT)?;
+        self.try_standby().map_err(|e| {
+            log::error!("cannot hold modem lines in standby: {e}");
+            self.rollback_park();
+            if let Err(e) = self.dtr.set_low() {
+                log::error!("DTR stays high: modem may sleep while awake: {e}");
+            }
             Error::Io
         })
     }

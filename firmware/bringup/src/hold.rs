@@ -39,15 +39,16 @@ pub fn disable_during_deep_sleep() {
     unsafe { sys::gpio_deep_sleep_hold_dis() };
 }
 
-/// Drive a pad low as plain GPIO, detaching any peripheral routed to it.
+/// Drive a pad to `high` as plain GPIO, detaching any peripheral routed to it.
 ///
-/// Used to park the modem UART TX line before sleep. The caller must re-route
-/// the pad to its peripheral if the sleep is aborted (see
-/// `AtTransport::reattach`).
+/// Used to park the modem UART TX line before sleep: low with the modem off
+/// (no current into an unpowered pin), high with the modem asleep (a low line
+/// looks like a break and wakes it). The caller must re-route the pad to its
+/// peripheral if the sleep is aborted (see `AtTransport::reattach`).
 ///
 /// # Errors
 /// If ESP-IDF rejects the pad.
-pub fn park_low(pin: PinId) -> Result<(), EspError> {
+pub fn park(pin: PinId, high: bool) -> Result<(), EspError> {
     let gpio = sys::gpio_num_t::from(pin);
     // SAFETY: reconfigures one pad's mux/direction only. The UART driver keeps
     // working memory-safely; it just stops reaching the pad until re-routed.
@@ -57,6 +58,6 @@ pub fn park_low(pin: PinId) -> Result<(), EspError> {
             gpio,
             sys::gpio_mode_t_GPIO_MODE_OUTPUT
         ))?;
-        sys::esp!(sys::gpio_set_level(gpio, 0))
+        sys::esp!(sys::gpio_set_level(gpio, u32::from(high)))
     }
 }

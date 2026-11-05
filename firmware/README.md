@@ -54,7 +54,7 @@ Reglas:
 ## Tests (sin placa)
 
 ```bash
-make test-firmware          # core (39) + drivers (25)
+make test-firmware          # core (44) + drivers (25)
 ```
 
 Los drivers verifican el tráfico I²C exacto: la receta de interrupción AN3308,
@@ -124,6 +124,7 @@ sensor pierde alimentación, la línea flota: la placa despierta en bucle o
 | (arranque) | 3 | niveles SDA/SCL con pull-down: dice qué cable no llega al módulo |
 | `!arm [mg]` | 4a | INT1 durante 30 s con la placa despierta |
 | `!sleep [mg]` | 4b / P1 | módem OFF, deep sleep, despertar por movimiento |
+| `!standby [mg]` | P2 | módem registrado en su sleep LTE (`AT+CSCLK=1`, DTR alto retenido), deep sleep, despertar por movimiento. Registrar antes (`!diag`) |
 | `!vbat` | — | rail de batería |
 | `!modem on\|off` | — | secuencia de potencia del módem |
 | `AT...` | — | cualquier línea sin `!` va tal cual al módem |
