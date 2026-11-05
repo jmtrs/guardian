@@ -187,3 +187,26 @@ Incidencias del banco:
 
 Pendiente para cerrar P2: sleep por DTR (`AT+CSCLK=1` + DTR alto) controlado
 por firmware, con la ESP32 en deep sleep y los pads del módem retenidos.
+
+## 2026-11-05 · Unidad 1 · P2b (`!standby`)
+
+Firmware con `!standby` (`bfc3b27`, `fff25bf`) grabado. Módem registrado con
+batería (Orange, eDRX 82 s concedido por la red), luego `!standby 500`:
+`AT+CSCLK=1`, DTR alto, alimentación del módem y TX en reposo retenidos, ESP32
+en deep sleep.
+
+| Medida | Resultado | Lectura |
+|---|---|---|
+| **P2b**, 2 min | **19,5 mA** de media (19,7 con el cero corregido), suelo de 16,5 mA en 70 ms, picos de 28–43 mA | Restando P1 (1,2 mA), **el módem en sleep gasta ≈ 18 mA**. Igual que con `CSCLK=2` y la ESP32 despierta |
+| Esperable en sleep LTE (SIMCom) | 2–3 mA | Hay ~15 mA que no son del sleep del módem |
+| Primer intento | `interrupt line stuck high`, rechazado | Movimiento al lanzarlo; reintento a 500 mg sin problema |
+
+Orientativo con 2500 mAh: P2b ≈ 127 h (**~5 días**), frente a ~87 días de P1.
+
+Hipótesis por comprobar, de más a menos probable:
+
+1. Polarización de la antena GNSS activa (LNA alimentado aunque el GNSS esté
+   apagado): típicamente 5–15 mA.
+2. Convertidor o regulador del raíl del módem en la placa, con pérdidas a baja carga.
+3. eDRX concedido pero no aplicado: los picos de paging siguen apareciendo
+   cada pocos segundos.
