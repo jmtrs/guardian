@@ -7,7 +7,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { randomBytes } from 'crypto';
-import { Prisma } from '@prisma/client';
+import { DeviceKind, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 import {
@@ -44,12 +44,14 @@ export type IngestResult = {
 const DEVICE_PUBLIC_FIELDS = {
   id: true,
   name: true,
+  kind: true,
   ownerId: true,
   state: true,
   tripState: true,
   workshopUntil: true,
   lastSeq: true,
   lastSeenAt: true,
+  heartbeatIntervalSec: true,
   lastLat: true,
   lastLon: true,
   lastFixAt: true,
@@ -94,7 +96,7 @@ export class DevicesService {
    * Devuelve, una sola vez: el secreto en claro (K_root) y el codigo de claim.
    * En la BD solo queda el secreto cifrado y el HASH del codigo.
    */
-  async createDevice(name: string) {
+  async createDevice(name: string, kind: DeviceKind = DeviceKind.PHYSICAL) {
     const secret = randomBytes(32).toString('hex');
     // claimCodeHash es @unique: una colision (astronomicamente rara) es un P2002;
     // se regenera el codigo y se reintenta en vez de fallar el aprovisionamiento.
@@ -104,6 +106,7 @@ export class DevicesService {
         const device = await this.prisma.device.create({
           data: {
             name,
+            kind,
             secret: encryptSecret(secret),
             claimCodeHash: hashClaimCode(claimCode),
             pairingExpiresAt: new Date(Date.now() + PAIRING_WINDOW_MS),
@@ -123,6 +126,25 @@ export class DevicesService {
         throw error;
       }
     }
+  }
+
+  /** Configuración de banco: null desactiva el watchdog durante el rollout. */
+  async configureLiveness(deviceId: string, heartbeatIntervalSec: number | null) {
+    if (
+      heartbeatIntervalSec !== null &&
+      (!Number.isInteger(heartbeatIntervalSec) ||
+        heartbeatIntervalSec < 60 ||
+        heartbeatIntervalSec > 604_800)
+    ) {
+      throw new BadRequestException(
+        'Heartbeat interval must be null or between 60 and 604800 seconds',
+      );
+    }
+    return this.prisma.device.update({
+      where: { id: deviceId },
+      data: { heartbeatIntervalSec },
+      select: DEVICE_PUBLIC_FIELDS,
+    });
   }
 
   /**
@@ -221,9 +243,14 @@ export class DevicesService {
       if (!incident) {
         throw new NotFoundException('Incident not found');
       }
-      // Cota por secuencia, no por reloj: openedByEventSeq viene del propio
-      // canal del dispositivo, inmune al skew entre reloj del vehiculo y servidor.
-      where.seq = { gte: incident.openedByEventSeq };
+      // Las alertas normales se acotan por secuencia (inmune a skew). Un
+      // signal_lost no tiene evento de apertura; para ese caso se usa el reloj
+      // del servidor que abrio el incidente.
+      if (incident.openedByEventSeq === null) {
+        where.receivedAt = { gte: incident.openedAt };
+      } else {
+        where.seq = { gte: incident.openedByEventSeq };
+      }
     } else if (scope?.tripId) {
       const trip = await this.prisma.tripAuthorization.findFirst({
         where: { id: scope.tripId, deviceId },
@@ -470,6 +497,14 @@ export class DevicesService {
           });
         }
       }
+
+      // signal_lost registra una ausencia ya ocurrida. La primera peticion
+      // autenticada que vuelve a avanzar la secuencia demuestra recuperacion:
+      // se cierra, pero el incidente permanece en historial.
+      await tx.incident.updateMany({
+        where: { deviceId, state: { in: ['OPEN', 'ACKNOWLEDGED'] }, kind: 'signal_lost' },
+        data: { state: 'CLOSED', closedAt: new Date(), closedByEventSeq: event.sequence },
+      });
 
       // Recuperacion observada de energia: un incidente power_lost YA REVISADO
       // (ACKNOWLEDGED) se cierra cuando un evento posterior re-observa la

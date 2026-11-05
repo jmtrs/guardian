@@ -8,11 +8,12 @@ import {
   IngestController,
 } from './ingest.controller';
 import { DevicesService } from './devices.service';
+import { LivenessService } from './liveness.service';
 import { RetentionService } from './retention.service';
 
 @Module({
   imports: [AuthModule, PrismaModule],
   controllers: [IngestController, DevicesController, IncidentsController, DeviceCommandsController],
-  providers: [DevicesService, RetentionService],
+  providers: [DevicesService, RetentionService, LivenessService],
 })
 export class DevicesModule {}

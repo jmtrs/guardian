@@ -9,7 +9,9 @@
 //!              observed_at="2026-11-05T11:30:00Z")
 //! ```
 
-use guardian_protocol::envelope::{encode_event, Kind, Power, PowerSource};
+use guardian_protocol::envelope::{
+    encode_event, encode_gnss_fix, Kind, Position, Power, PowerSource,
+};
 use guardian_protocol::identity::{Context, DeviceId, RootSecret};
 use guardian_protocol::time::UtcTime;
 use guardian_protocol::ProtocolError;
@@ -83,6 +85,23 @@ fn sequence_must_be_in_backend_range() {
             Some(ProtocolError::Sequence)
         );
     }
+}
+
+#[test]
+fn gnss_fix_requires_position_and_can_correlate_a_command() {
+    let observed = UtcTime::from_civil(2026, 11, 5, 11, 30, 0).unwrap();
+    let power = Power::new(13_900, Some(4_110), PowerSource::Vehicle).unwrap();
+    assert_eq!(
+        encode_event(&device(), 8, Kind::GnssFix, observed, power).err(),
+        Some(ProtocolError::Position)
+    );
+    let position = Position::new(40.4168, -3.7038, observed).unwrap();
+    let body = encode_gnss_fix(&device(), 8, observed, power, position, Some("cmd_123")).unwrap();
+    assert_eq!(body.sequence(), 8);
+    assert_eq!(
+        core::str::from_utf8(body.as_bytes()).unwrap(),
+        r#"{"schemaVersion":2,"deviceId":"dev-test-1","sequence":8,"kind":"gnss_fix","observedAtUtc":"2026-11-05T11:30:00Z","power":{"vehicleMv":13900,"source":"vehicle","reserveMv":4110},"commandId":"cmd_123","position":{"lat":40.4168,"lon":-3.7038,"fixAtUtc":"2026-11-05T11:30:00Z"}}"#
+    );
 }
 
 #[test]

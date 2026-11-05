@@ -101,6 +101,7 @@ impl Power {
 pub struct Body {
     bytes: [u8; MAX_BODY],
     len: usize,
+    sequence: u32,
 }
 
 impl Body {
@@ -108,6 +109,12 @@ impl Body {
     #[must_use]
     pub fn as_bytes(&self) -> &[u8] {
         &self.bytes[..self.len]
+    }
+
+    /// Monotonic sequence encoded in these bytes.
+    #[must_use]
+    pub const fn sequence(&self) -> u32 {
+        self.sequence
     }
 }
 
@@ -135,12 +142,85 @@ pub fn encode_event(
     observed_at: UtcTime,
     power: Power,
 ) -> Result<Body, ProtocolError> {
+    if kind == Kind::GnssFix {
+        return Err(ProtocolError::Position);
+    }
+    encode(device, sequence, kind, observed_at, power, None, None)
+}
+
+/// A validated GNSS position.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Position {
+    lat: f64,
+    lon: f64,
+    fix_at: UtcTime,
+}
+
+impl Position {
+    /// Validate coordinates using the same bounds as the backend.
+    ///
+    /// # Errors
+    /// [`ProtocolError::Position`] for non-finite or out-of-range coordinates.
+    pub fn new(lat: f64, lon: f64, fix_at: UtcTime) -> Result<Self, ProtocolError> {
+        if !lat.is_finite()
+            || !lon.is_finite()
+            || !(-90.0..=90.0).contains(&lat)
+            || !(-180.0..=180.0).contains(&lon)
+        {
+            return Err(ProtocolError::Position);
+        }
+        Ok(Self { lat, lon, fix_at })
+    }
+}
+
+/// Encode a GNSS fix, optionally correlated with `LOCATE_NOW`.
+///
+/// # Errors
+/// Invalid sequence, position, command id, or a body larger than [`MAX_BODY`].
+pub fn encode_gnss_fix(
+    device: &DeviceId,
+    sequence: u32,
+    observed_at: UtcTime,
+    power: Power,
+    position: Position,
+    command_id: Option<&str>,
+) -> Result<Body, ProtocolError> {
+    if command_id.is_some_and(|id| {
+        id.is_empty()
+            || id.len() > 64
+            || !id
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+    }) {
+        return Err(ProtocolError::CommandId);
+    }
+    encode(
+        device,
+        sequence,
+        Kind::GnssFix,
+        observed_at,
+        power,
+        Some(position),
+        command_id,
+    )
+}
+
+fn encode(
+    device: &DeviceId,
+    sequence: u32,
+    kind: Kind,
+    observed_at: UtcTime,
+    power: Power,
+    position: Option<Position>,
+    command_id: Option<&str>,
+) -> Result<Body, ProtocolError> {
     if sequence == 0 || sequence >= SEQUENCE_LIMIT {
         return Err(ProtocolError::Sequence);
     }
     let mut body = Body {
         bytes: [0; MAX_BODY],
         len: 0,
+        sequence,
     };
     write!(
         body,
@@ -155,6 +235,18 @@ pub fn encode_event(
     if let Some(reserve) = power.reserve_mv {
         write!(body, ",\"reserveMv\":{reserve}").map_err(|_| ProtocolError::TooLong)?;
     }
-    body.write_str("}}").map_err(|_| ProtocolError::TooLong)?;
+    body.write_str("}").map_err(|_| ProtocolError::TooLong)?;
+    if let Some(command_id) = command_id {
+        write!(body, ",\"commandId\":\"{command_id}\"").map_err(|_| ProtocolError::TooLong)?;
+    }
+    if let Some(position) = position {
+        write!(
+            body,
+            ",\"position\":{{\"lat\":{},\"lon\":{},\"fixAtUtc\":\"{}\"}}",
+            position.lat, position.lon, position.fix_at
+        )
+        .map_err(|_| ProtocolError::TooLong)?;
+    }
+    body.write_str("}").map_err(|_| ProtocolError::TooLong)?;
     Ok(body)
 }

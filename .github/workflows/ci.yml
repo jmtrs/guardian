@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        crate: [guardian-protocol, guardian-core, guardian-drivers]
+        crate: [guardian-protocol, guardian-core, guardian-drivers, guardian-device]
     defaults:
       run:
         working-directory: firmware/${{ matrix.crate }}
@@ -47,6 +47,13 @@ jobs:
       - run: cargo doc --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
+
+  firmware-security-template:
+    name: Firmware security config gate (read-only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash firmware/production/check-security-config.sh firmware/production/sdkconfig.security.defaults template
 
   firmware-esp32:
     name: Firmware ${{ matrix.crate }} (${{ matrix.chip }})
@@ -80,6 +87,23 @@ jobs:
   backend:
     name: Backend (NestJS)
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: guardian
+          POSTGRES_PASSWORD: guardian
+          POSTGRES_DB: guardian_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U guardian -d guardian_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://guardian:guardian@localhost:5432/guardian_test?schema=public
+      NODE_ENV: test
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -90,15 +114,27 @@ jobs:
           node-version: 22
           cache: pnpm
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --strict-peer-dependencies
       - name: Prisma generate
         run: pnpm --filter backend exec prisma generate
+      - name: Production dependency audit
+        run: pnpm run audit:prod
+      - name: Lint
+        run: pnpm --filter backend run lint
+      - name: Script syntax
+        run: pnpm run check:scripts
       - name: Typecheck
         run: pnpm --filter backend exec tsc --noEmit
       - name: Unit tests
         run: pnpm --filter backend run test
+      - name: Apply migrations to test database
+        run: pnpm --filter backend exec prisma migrate deploy
+      - name: PostgreSQL integration tests
+        run: pnpm --filter backend run test:e2e --runInBand
       - name: Build
         run: pnpm --filter backend run build
+      - name: Built application smoke test
+        run: pnpm --filter backend run smoke:built
 
   mobile:
     name: Mobile (Expo)
@@ -113,7 +149,11 @@ jobs:
           node-version: 22
           cache: pnpm
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --strict-peer-dependencies
+      - name: Resolve Expo configuration
+        run: pnpm --filter mobile exec expo config --type public >/dev/null
+      - name: Lint
+        run: pnpm --filter mobile run lint
       - name: Typecheck
         run: pnpm --filter mobile exec tsc --noEmit
       - name: Unit tests

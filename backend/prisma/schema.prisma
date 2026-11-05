@@ -95,6 +95,13 @@ enum DeviceState {
   WORKSHOP // modo taller temporal
 }
 
+// Separa identidades fisicas de las usadas por herramientas de simulacion.
+// Compartir un contador entre ambos deja al firmware bloqueado por anti-replay.
+enum DeviceKind {
+  PHYSICAL
+  SIMULATOR
+}
+
 // Handshake de confirmacion del viaje. Separado de DeviceState: el modo
 // (ARMED/TRIP/WORKSHOP) es el estado de seguridad; tripState rastrea si el
 // desarme fue solicitado y confirmado. Sin canal ACK con el dispositivo aun,
@@ -109,6 +116,7 @@ enum TripState {
 enum IncidentKind {
   suspected_movement
   power_lost
+  signal_lost
 }
 
 enum IncidentState {
@@ -134,6 +142,7 @@ enum CommandStatus {
 model Device {
   id         String      @id @default(cuid())
   name       String
+  kind       DeviceKind  @default(PHYSICAL)
   // Clave raiz HMAC del dispositivo (K_root). Cifrada en reposo con AES-256-GCM
   // (master key en env GUARDIAN_SECRET_KEY, fuera de la BD): formato
   // `enc:v1:iv:tag:ct`. Ver src/devices/secret-crypto.ts. Los secretos legado
@@ -162,6 +171,9 @@ model Device {
   workshopUntil DateTime?
   lastSeq    Int         @default(0)
   lastSeenAt DateTime?
+  // Cadencia esperada por el watchdog de silencio. NULL = desactivado hasta
+  // que el firmware productivo tenga heartbeat periodico configurado.
+  heartbeatIntervalSec Int?
   // Ultimo estado denormalizado: evita escanear device_events para la
   // "ultima posicion/energia conocida" (dashboard + preview de mapa).
   lastLat       Float?
@@ -183,10 +195,10 @@ model Device {
 }
 
 // Incidente de seguridad: hecho persistente, no derivado del ultimo evento.
-// Un heartbeat posterior NO lo cierra (el ingest nunca cierra incidentes);
-// solo el dueno cierra explicitamente. Idempotencia: un unico incidente OPEN
-// por (deviceId, kind) — garantizada en codigo dentro de la tx del ingest,
-// que es de escritor unico por dispositivo (guardado por lastSeq).
+// Un heartbeat posterior no borra alertas de movimiento/corte. La excepcion es
+// signal_lost: el siguiente evento autenticado demuestra recuperacion y lo
+// cierra conservando historial. Un unico OPEN por (deviceId, kind), reforzado
+// por indice parcial en la migracion.
 model Incident {
   id                String        @id @default(cuid())
   deviceId          String
@@ -196,7 +208,8 @@ model Incident {
   openedAt          DateTime      @default(now())
   acknowledgedAt    DateTime?
   closedAt          DateTime?
-  openedByEventSeq  Int // seq del evento que lo abrio (trazabilidad)
+  // NULL solo para signal_lost: la ausencia de un evento es lo que lo abre.
+  openedByEventSeq  Int?
   // seq del evento que lo cerro (cierre por recuperacion observada); null si
   // el cierre fue manual (closeIncident) o por autorizacion de viaje.
   closedByEventSeq  Int?

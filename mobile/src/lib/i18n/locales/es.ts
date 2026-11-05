@@ -112,6 +112,7 @@ export const es = {
     kindSuspectedMovement: 'Movimiento sospechoso',
     kindBatteryLow: 'Batería baja',
     kindPowerLost: 'Alimentación cortada',
+    kindSignalLost: 'Dispositivo sin señal',
     kindHeartbeat: 'Latido',
     kindGnssFix: 'Posición GNSS',
   },

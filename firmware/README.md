@@ -6,8 +6,9 @@ ESP-IDF v5.4.2 (`esp-idf-svc`). La pieza actual es la herramienta de banco
 [COMPONENTES.md](../docs/COMPONENTES.md#primera-secuencia-al-recibir-las-piezas),
 validados en la unidad 1, incluido el primer evento firmado v2 aceptado por el
 backend de producción. El **banco de consumo** (`power-bench`, un ESP32-S3 que
-lee un INA219) midió P1, P2b y P3. El firmware de producción reutilizará
-`guardian-protocol`, `guardian-core` y `guardian-drivers`.
+lee un INA219) midió P1, P2b y P3. `guardian-device` contiene ya el primer
+dominio productivo: outbox persistente y orden estricto del ciclo, sin adapters
+de placa todavía.
 
 Estado global y lista de pendientes: [docs/ESTADO_Y_PENDIENTES.md](../docs/ESTADO_Y_PENDIENTES.md).
 Registro de cada prueba en la placa: [docs/hardware/BRINGUP_LOG.md](../docs/hardware/BRINGUP_LOG.md).
@@ -38,6 +39,11 @@ Registro de cada prueba en la placa: [docs/hardware/BRINGUP_LOG.md](../docs/hard
  ├── lis3dh.rs    Lis3dh<I2c, InputPin, DelayNs>: MotionSensor
  ├── ina219.rs    Ina219<I2c>: PowerMeter (shunt crudo, sin registro de calibración)
  └── at.rs        LineFramer + final_result (lado puro del módem)
+         ▲ usa
+ guardian-device (no_std, forbid(unsafe))
+ ├── outbox.rs    bytes+seq persistidos antes de red; reintento exacto hasta 202/409
+ ├── cycle.rs     boot/wake → outbox → motion → commands → GNSS/HB → sleep
+ └── ports.rs     storage, reloj, energía, posición, comandos y wake timer
           ▲ usan
  bringup (xtensa-esp32-espidf, std)
  ├── board.rs     ÚNICO sitio con pines físicos → roles
@@ -55,13 +61,13 @@ Registro de cada prueba en la placa: [docs/hardware/BRINGUP_LOG.md](../docs/hard
 Reglas:
 - `guardian-protocol` solo depende de `RustCrypto`; `guardian-core`, solo de `guardian-protocol`.
 - `guardian-drivers` depende solo del core y de `embedded-hal`.
-- Solo `bringup` y `power-bench` conocen ESP-IDF.
+- Solo `bringup` y `power-bench` conocen ESP-IDF; falta el composition root productivo.
 - Ningún archivo pasa de 300 líneas. `missing_docs = "deny"` y clippy `pedantic` en todos los crates.
 
 ## Tests (sin placa)
 
 ```bash
-make test-firmware          # protocol (11) + core (60) + drivers (29)
+make test-firmware          # protocol (12) + core (60) + drivers (29) + device (7)
 ```
 
 Los drivers verifican el tráfico I²C exacto: la receta de interrupción AN3308,
@@ -69,9 +75,11 @@ el decodificado de 12 bits, el fallback de dirección 0x18→0x19 y que rechaza 
 LIS3DSH.
 
 CI:
-- `firmware-host`: fmt, clippy y test de core y drivers.
+- `firmware-host`: fmt, clippy, test y docs de protocol, core, drivers y device.
 - `firmware-esp32`: clippy y build de `bringup` (`xtensa-esp32-espidf`) y
   `power-bench` (`xtensa-esp32s3-espidf`).
+- `firmware-security-template`: gate de configuración solo lectura; no flashea
+  ni quema eFuses. Ver [`production/README.md`](production/README.md).
 
 ## Toolchain (una vez)
 
