@@ -3,7 +3,9 @@
 //!
 //! Power-on sequence mirrors LILYGO `examples/ATdebug` for `LILYGO_T_A7670`.
 
+mod capture;
 mod http;
+mod tls;
 mod transport;
 
 use std::thread;

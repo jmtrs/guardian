@@ -18,6 +18,9 @@ use esp_idf_svc::sys::{self, EspError, ESP_ERR_NO_MEM};
 use guardian_core::Error;
 use guardian_drivers::at::{final_result, FinalResult, LineFramer, ResultGate};
 
+use super::capture::Capture;
+pub use super::capture::Prompt;
+
 /// UART read timeout per reader-thread iteration, in RTOS ticks.
 const READ_TICKS: u32 = 5;
 /// Back-off after a UART read error, so a persistent fault cannot spin.
@@ -25,7 +28,7 @@ const READ_ERROR_BACKOFF: Duration = Duration::from_millis(10);
 const READER_STACK: usize = 6 * 1024;
 /// Longest wait for results owed by earlier commands before writing them off.
 const DRAIN_MAX: Duration = Duration::from_secs(2);
-/// Wait for a `DOWNLOAD` prompt after a payload command.
+/// Wait for the prompt after a payload command.
 const PROMPT_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// Receives every line the modem emits (responses and URCs), CR/LF stripped.
@@ -36,17 +39,7 @@ pub type LineSink = Box<dyn Fn(&str) + Send>;
 struct Shared {
     gate: Mutex<ResultGate>,
     changed: Condvar,
-    watch: Mutex<Watch>,
-    watched: Condvar,
-}
-
-/// Capture of the next line starting with a prefix: a response line
-/// (`+CCLK: ...`), a prompt (`DOWNLOAD`) or a URC (`+HTTPACTION: ...`). One at
-/// a time: commands are serialised by `&mut` on the modem.
-#[derive(Default)]
-struct Watch {
-    prefix: Option<&'static str>,
-    line: Option<String>,
+    capture: Capture,
 }
 
 impl Shared {
@@ -57,12 +50,7 @@ impl Shared {
     /// Called by the reader for every line, after the sink has run (the sink
     /// never runs under the lock, so a slow sink cannot block `command`).
     fn on_line(&self, line: &str) {
-        let mut watch = self.watch.lock().unwrap_or_else(PoisonError::into_inner);
-        if watch.line.is_none() && watch.prefix.is_some_and(|p| line.starts_with(p)) {
-            watch.line = Some(line.to_owned());
-            self.watched.notify_all();
-        }
-        drop(watch);
+        self.capture.offer_line(line);
         if let Some(result) = final_result(line) {
             self.lock().offer(result);
             self.changed.notify_all();
@@ -92,8 +80,7 @@ impl AtTransport {
         let shared = Arc::new(Shared {
             gate: Mutex::default(),
             changed: Condvar::new(),
-            watch: Mutex::default(),
-            watched: Condvar::new(),
+            capture: Capture::default(),
         });
         spawn_reader(Arc::clone(&uart), Arc::clone(&shared), sink)?;
         Ok(Self { uart, shared, pads })
@@ -121,13 +108,13 @@ impl AtTransport {
         timeout: Duration,
         wait: Duration,
     ) -> Result<String, Error> {
-        self.arm(prefix);
+        self.shared.capture.arm(Prompt::Line(prefix));
         self.command(cmd, timeout)?;
-        self.watched_line(wait).ok_or(Error::Timeout)
+        self.shared.capture.take(wait).ok_or(Error::Timeout)
     }
 
-    /// Send a command that answers `DOWNLOAD`, then `payload` (no CRLF), and
-    /// wait for the final result.
+    /// Send a command that answers with `prompt`, then `payload` (no CRLF),
+    /// and wait for the final result.
     ///
     /// # Errors
     /// [`Error::Timeout`] if the prompt or the result never comes,
@@ -135,12 +122,13 @@ impl AtTransport {
     pub fn command_with_payload(
         &self,
         cmd: &str,
+        prompt: Prompt,
         payload: &[u8],
         timeout: Duration,
     ) -> Result<(), Error> {
-        self.arm("DOWNLOAD");
+        self.shared.capture.arm(prompt);
         self.begin(cmd);
-        if self.watched_line(PROMPT_TIMEOUT).is_none() {
+        if self.shared.capture.take(PROMPT_TIMEOUT).is_none() {
             // The result (an ERROR, or nothing) still settles the gate.
             return self.finish(timeout).and(Err(Error::Timeout));
         }
@@ -148,35 +136,6 @@ impl AtTransport {
             log::error!("modem UART write failed");
         }
         self.finish(timeout)
-    }
-
-    fn arm(&self, prefix: &'static str) {
-        *self
-            .shared
-            .watch
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner) = Watch {
-            prefix: Some(prefix),
-            line: None,
-        };
-    }
-
-    /// Wait for the armed capture, then disarm.
-    fn watched_line(&self, wait: Duration) -> Option<String> {
-        let (mut watch, _) = self
-            .shared
-            .watched
-            .wait_timeout_while(
-                self.shared
-                    .watch
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner),
-                wait,
-                |w| w.line.is_none(),
-            )
-            .unwrap_or_else(PoisonError::into_inner);
-        watch.prefix = None;
-        watch.line.take()
     }
 
     /// Wait until no earlier result is owed, then send `cmd`.
@@ -263,10 +222,13 @@ fn spawn_reader(
             let mut chunk = [0u8; 128];
             loop {
                 match uart.read(&mut chunk, READ_TICKS) {
-                    Ok(n) => framer.push(&chunk[..n], |line| {
-                        sink(line);
-                        shared.on_line(line);
-                    }),
+                    Ok(n) => {
+                        shared.capture.offer_chunk(&chunk[..n]);
+                        framer.push(&chunk[..n], |line| {
+                            sink(line);
+                            shared.on_line(line);
+                        });
+                    }
                     Err(_) => thread::sleep(READ_ERROR_BACKOFF),
                 }
             }

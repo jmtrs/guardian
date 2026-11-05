@@ -1,10 +1,6 @@
 //! [`Uplink`] over the A7670's own TCP/IP stack: network clock and HTTPS
-//! `POST` with `AT+HTTP*` (`SIMCom` A76XX HTTP(S) application note).
-//!
-//! Bench limitation: the server certificate is **not verified**
-//! (`authmode 0`). The HMAC still authenticates every event and the backend
-//! rejects tampering, but the body is readable by a man in the middle.
-//! Production must load the CA and verify (`authmode 1`).
+//! `POST` with `AT+HTTP*` (`SIMCom` A76XX HTTP(S) application note). The
+//! server certificate is verified (see [`tls`](super::tls)).
 
 use std::time::Duration;
 
@@ -13,6 +9,7 @@ use guardian_core::Error;
 use guardian_drivers::simcom::{parse_cclk, parse_http_action};
 use guardian_protocol::time::UtcTime;
 
+use super::transport::Prompt;
 use super::A7670;
 
 const SHORT: Duration = Duration::from_secs(2);
@@ -28,14 +25,6 @@ const NTP_SERVER: &str = "pool.ntp.org";
 const NTP_WAIT: Duration = Duration::from_secs(20);
 /// Device-channel user agent: Cloudflare blocks unknown or empty ones.
 const USER_AGENT: &str = "Guardian-Device/2";
-
-/// SSL context 0: any TLS version, SNI on (required behind Cloudflare),
-/// no certificate verification (see module docs).
-const TLS_SETUP: [&str; 3] = [
-    r#"AT+CSSLCFG="sslversion",0,4"#,
-    r#"AT+CSSLCFG="authmode",0,0"#,
-    r#"AT+CSSLCFG="enableSNI",0,1"#,
-];
 
 impl Uplink for A7670 {
     fn network_time(&mut self) -> Result<UtcTime, Error> {
@@ -70,9 +59,7 @@ impl A7670 {
     }
 
     fn http_post(&mut self, request: &DeviceRequest<'_>) -> Result<u16, Error> {
-        for line in TLS_SETUP {
-            self.command(line, SHORT)?;
-        }
+        self.ensure_tls()?;
         self.command("AT+HTTPINIT", SHORT)?;
         self.command(
             &format!(r#"AT+HTTPPARA="URL","{}{}""#, self.backend, request.path),
@@ -92,6 +79,7 @@ impl A7670 {
         }
         self.at.command_with_payload(
             &format!("AT+HTTPDATA={},{UPLOAD_WINDOW_MS}", request.body.len()),
+            Prompt::Line("DOWNLOAD"),
             request.body,
             UPLOAD_TIMEOUT,
         )?;

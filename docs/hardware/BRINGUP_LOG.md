@@ -245,3 +245,19 @@ Pendiente de producción: verificar el certificado del servidor
 autenticado o hora por GNSS.
 
 Pasos de COMPONENTES.md: **7 (primer evento firmado v2) ✅**.
+
+## 2026-11-05 · Unidad 1 · HTTPS con verificación de certificado
+
+El paquete de raíces (`firmware/bringup/certs/guardian-ca.pem`: ISRG Root X1,
+GTS Root R1 y R4) se sube una vez al sistema de ficheros del módem
+(`AT+CCERTDOWN`, prompt `>` sin salto de línea: el transport ahora detecta
+prompts por byte) y el contexto SSL 0 queda en `authmode 1`, con la fecha del
+certificado comprobada contra el reloj sincronizado por NTP.
+
+| Prueba | Resultado |
+|---|---|
+| `!event` a `gtapi.aggc.dev` (cadena YE1 → Root YE → X2 → **X1**) | **HTTP 202** |
+| GET a `self-signed.badssl.com` con el mismo contexto | `+HTTPACTION: 0,715,0`: handshake rechazado |
+| GET a `badssl.com` (certificado válido) | `200` |
+
+La limitación `authmode 0` del primer evento queda cerrada.
