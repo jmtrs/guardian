@@ -1,6 +1,6 @@
 # Guardian · alimentación y reserva para instalación personal
 
-**Estado: decisión de arquitectura, NO instalación validada.** Complementa el [diseño personal v0.5](../GUARDIAN_DISENO_PERSONAL_v0_5.md), que sigue siendo la especificación funcional. Para interpretación de la electrónica ya publicada por LILYGO, consultar el [esquema V1.4 y las referencias verificadas](ESQUEMA_T_A7670X_V1_4.md). No se ha comprado ni probado en banco la T-A7670E R2 concreta, ni se ha cerrado un circuito de potencia automotriz.
+**Estado: decisión de arquitectura, NO instalación validada.** Complementa el [diseño personal v0.5](../GUARDIAN_DISENO_PERSONAL_v0_5.md), que sigue siendo la especificación funcional. Para interpretación de la electrónica ya publicada por LILYGO, consultar el [esquema V1.4 y las referencias verificadas](ESQUEMA_T_A7670X_V1_4.md). La unidad 1 de la T-A7670E ya está en banco: bring-up completo y P1/P2b/P3 medidos desde la 18650 (ver [COMPONENTES](../COMPONENTES.md#resultados-en-la-unidad-1-2026-11-05-desde-la-18650-378-v) y el [registro](BRINGUP_LOG.md)). No se ha cerrado un circuito de potencia automotriz.
 
 ## Decisión acordada para la primera versión personal
 
@@ -52,9 +52,16 @@ Si no es posible conseguir esa protección de forma **mecánica y eléctricament
 
 **Límite físico:** detener la carga fuera de rango no hace automáticamente adecuada una celda para almacenamiento prolongado a temperaturas extremas. Elegir celda auténtica con ficha técnica, comprobar sus límites de carga, descarga y almacenamiento, fijar Guardian en un lugar seco y protegido del calor directo y medir allí la temperatura real durante condiciones representativas. No prometer autonomía tras corte hasta medir consumo y capacidad útil bajo esas condiciones.
 
+## Observaciones de la unidad 1 (2026-11-05)
+
+- El pin `V_BAT` es el + de la celda directo. El − pasa por la protección `U8 DW06D` (MOSFET en el lado bajo) antes de GND; con la celda puesta, la caída es de ~9 mV a 47 mA.
+- Con USB y sin celda, `!vbat` lee ~4,25 V: es la salida del CN3065, no una batería.
+- El ADC de batería con divisor ×2 lee un ~2 % alto frente al INA219 (3834 frente a 3760 mV). Falta calibrarlo con multímetro.
+- Al desenchufar el USB con el módem registrado, el módem se reinició y volvió a registrarse con la batería: hay una transición VBUS → batería que el firmware debe tolerar.
+
 ## Firmware previsto (cuando exista firmware físico)
 
-1. Persistir `event_id`, tipo de evento, contador y estado pendiente **antes** de comunicaciones costosas, con política de desgaste/atomicidad y recuperación ante corte durante escritura.
+1. Persistir `event_id`, tipo de evento, contador y estado pendiente **antes** de comunicaciones costosas, con política de desgaste/atomicidad y recuperación ante corte durante escritura. *Hecho para el contador*: la secuencia se reserva en NVS antes de enviar (contrato §4.4). Falta la bandeja de eventos pendientes.
 2. Detectar fuente principal presente/ausente, leer tensión de la reserva si la revisión lo permite y registrar temperatura si se añade una lectura **independiente de la protección térmica por hardware**.
 3. En el arranque, recuperar eventos pendientes; ante caída principal, enviar aviso 4G autenticado y seguro antes de esperar GNSS; reconectar y continuar con posiciones fechadas si hay energía/cobertura.
 4. Suprimir duplicados por `event_id` en el servidor sin perder reintentos; watchdog y modo de reserva con frecuencia de posición adaptativa según batería disponible.
@@ -71,4 +78,4 @@ Si no es posible conseguir esa protección de forma **mecánica y eléctricament
 | Batería del vehiculo | Medir reposo **del conjunto a 12 V**, corriente de cargador y fugas; el supervisor autónomo corta solo Guardian incluso con firmware bloqueado y no rearma oscilando. |
 | Prueba prolongada | Ensayo térmico y funcionamiento continuo en banco; después instalación reversible revisada y comprobación periódica de consumo, tensión del vehiculo, temperatura y salud de la celda. |
 
-**Estado de avances:** solo el backend/simulador Python está probado en CI. Este documento no declara aprobados batería, temperatura, umbrales, funcionamiento LTE/GNSS real, autonomía o instalación. La compra inmediata de desarrollo sigue siendo LILYGO, LIS3DH, cinco Dupont, USB de datos y SIM; una 18650 auténtica puede comprarse para pruebas **sobre mesa** cuando se verifique el alojamiento. No comprar NTC o piezas de modificación del cargador hasta inspeccionar la unidad recibida.
+**Estado de avances (2026-11-05):** backend, simulador Python y firmware Rust (host) probados en CI. LTE, GNSS, wake por movimiento y evento firmado funcionan en la unidad 1 sobre la mesa, con una LiitoKala 25R. Este documento **no** declara aprobados batería en el vehículo, temperatura, umbrales, autonomía o instalación. No comprar NTC o piezas de modificación del cargador hasta inspeccionar el circuito de carga de la unidad recibida.

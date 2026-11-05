@@ -2,19 +2,23 @@
 
 Firmware de la **LILYGO T-A7670E (ESP32 + SIMCom A7670E)** en Rust, sobre
 ESP-IDF v5.4.2 (`esp-idf-svc`). La pieza actual es la herramienta de banco
-**bring-up**, que cubre los pasos 1–4 de
-[COMPONENTES.md](../docs/COMPONENTES.md#primera-secuencia-al-recibir-las-piezas)
-y la medida P1. El **banco de consumo** (`power-bench`, un ESP32-S3 que lee un
-INA219) mide P1–P5. El firmware de producción reutilizará `guardian-core` y
-`guardian-drivers`.
+**bring-up**: cubre los pasos 1–7 de
+[COMPONENTES.md](../docs/COMPONENTES.md#primera-secuencia-al-recibir-las-piezas),
+validados en la unidad 1, incluido el primer evento firmado v2 aceptado por el
+backend de producción. El **banco de consumo** (`power-bench`, un ESP32-S3 que
+lee un INA219) midió P1, P2b y P3. El firmware de producción reutilizará
+`guardian-protocol`, `guardian-core` y `guardian-drivers`.
+
+Estado global y lista de pendientes: [docs/ESTADO_Y_PENDIENTES.md](../docs/ESTADO_Y_PENDIENTES.md).
+Registro de cada prueba en la placa: [docs/hardware/BRINGUP_LOG.md](../docs/hardware/BRINGUP_LOG.md).
 
 ## Por qué Rust y dónde
 
 | Capa | Lenguaje | Motivo |
 |---|---|---|
-| Lógica (dominio, casos de uso, protocolo futuro) | Rust `no_std`, sin `unsafe` | Seguridad de memoria y tipos donde viven los secretos y el protocolo v2. Tests con `cargo test` en el Mac. |
-| Drivers (LIS3DH, framing AT) | Rust `no_std` sobre `embedded-hal` 1.0 | Independientes de la HAL. Se testean con mocks de I²C/GPIO. |
-| Adapters de placa | Rust `std` sobre `esp-idf-hal` | Drivers ESP-IDF probados (UART, I²C, ADC calibrado, deep sleep). El `unsafe` queda confinado a `hold.rs`, `platform.rs`, `wiring.rs` y `modem/transport.rs`, con `SAFETY` documentado. |
+| Protocolo v2, dominio, casos de uso | Rust `no_std`, sin `unsafe` | Seguridad de memoria y tipos donde viven los secretos y el contrato. Cripto de `RustCrypto`, nada escrito a mano. Tests con `cargo test` en el Mac. |
+| Drivers (LIS3DH, INA219, framing AT, respuestas SIMCom) | Rust `no_std` sobre `embedded-hal` 1.0 | Independientes de la HAL. Se testean con mocks de I²C/GPIO. |
+| Adapters de placa | Rust `std` sobre `esp-idf-hal` | Drivers ESP-IDF probados (UART, I²C, ADC calibrado, NVS, deep sleep). El `unsafe` queda confinado a `hold.rs`, `platform.rs`, `wiring.rs` y `modem/transport.rs`, con `SAFETY` documentado. |
 | Sistema (RTOS, drivers, sleep) | C de ESP-IDF | Lo da Espressif. No se reescribe. |
 
 ## Arquitectura (hexagonal)
@@ -57,7 +61,7 @@ Reglas:
 ## Tests (sin placa)
 
 ```bash
-make test-firmware          # protocol (11) + core (60) + drivers (29)
+make test-firmware          # protocol (11) + core (58) + drivers (29)
 ```
 
 Los drivers verifican el tráfico I²C exacto: la receta de interrupción AN3308,
@@ -90,6 +94,9 @@ cargo run --release            # = espflash flash --monitor (elige el puerto)
 
 El puerto aparece como `/dev/cu.wchusbserial*` o `/dev/cu.usbserial*`. Si no
 aparece, el cable USB-C es solo de carga.
+
+Para automatizar la consola o el banco de consumo desde el Mac:
+[`tools/`](tools/README.md). Ojo con DTR/RTS al abrir el puerto.
 
 ## Cableado LIS3DH
 
@@ -202,17 +209,30 @@ medir la carga de un evento, `~help` las lista.
 de ~2 A: con 0,6 Ω de dupont y protoboard (medido en la unidad 1) caen más de
 1 V y la placa se reinicia o la protección corta la batería.
 
-## Supuestos a verificar en banco
+## Comportamiento y supuestos
 
 - **Pines**: tomados de `LILYGO_T_A7670` en el `utilities.h` oficial (`bringup/src/board.rs`).
-- **Divisor VBAT ×2** (`BATTERY_DIVIDER_X1000`): hay que medir R7/R9.
+  Verificados en la unidad 1: módem (potencia, UART, DTR), LIS3DH en IO21/IO22/IO34,
+  ADC de batería y consola UART0 en los pines `UART_TX`/`UART_RX` del header.
+- **Divisor VBAT ×2** (`BATTERY_DIVIDER_X1000`): lee un ~2 % alto frente al INA219
+  (3834 frente a 3760 mV). Falta calibrarlo con multímetro.
 - **PWRKEY**: el pulso de encendido (100 ms) no puede apagar un A7670 encendido,
   porque apagarlo requiere pulsación larga (LILYGO: 3000 ms). **Confirmar en banco.**
   La pulsación larga solo se usa si el módem responde a `AT` tras fallar `AT+CPOF`.
 - **Módem mudo = corte de alimentación**: si no responde a `AT`, `power_off` abre
   `POWER_EN` sin `CPOF`.
-- **Deep sleep**: `POWER_EN`, `PWRKEY`, `RESET` (inactivo), `DTR` y `TX` quedan
-  retenidos en bajo, para que P1 se mida sin alimentar el módem por las líneas de señal.
+- **Deep sleep, P1 (`!sleep`)**: `POWER_EN`, `PWRKEY`, `RESET` (inactivo), `DTR` y
+  `TX` quedan retenidos en bajo, para que P1 se mida sin alimentar el módem por
+  las líneas de señal.
+- **Deep sleep, P2 (`!standby`)**: `AT+CSCLK=1`; `POWER_EN` alto, `DTR` alto
+  (sleep permitido) y `TX` en alto (un nivel bajo es un *break* y lo despierta),
+  todos retenidos. Al despertar, `DTR` vuelve a bajo y el módem sigue registrado.
+- **Rail del módem y reset**: un reset real del ESP32 (EN) deja flotar IO12
+  (`POWER_EN`) y el módem pierde la alimentación. Abrir el puerto serie sin
+  tocar DTR/RTS ([`tools/`](tools/README.md)) evita resets accidentales.
+- **Causa de wake**: una vez, tras `rst:0x5 DEEPSLEEP_RESET`,
+  `esp_sleep_get_wakeup_cause` devolvió UNDEFINED y se anunció "power-on". En los
+  demás despertares se reportó bien. Sin explicar.
 - **`!sleep` se niega** a dormir si INT1 sigue alto tras limpiar el latch, si no se
   puede leer el latch o si falla el hold de algún pin.
 - **Correlación AT**: el protocolo no tiene ids. `ResultGate` (en `guardian-drivers`,

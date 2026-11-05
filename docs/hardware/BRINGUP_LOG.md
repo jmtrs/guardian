@@ -4,6 +4,16 @@ Resultados reales medidos con `firmware/bringup`. Cada entrada indica qué estab
 conectado, porque eso condiciona la lectura. Los identificadores únicos (IMEI,
 ICCID, MAC) no se registran aquí.
 
+**Resumen (unidad 1, 2026-11-05).** Pasos 1–7 ✅. P1 1,2 mA, P2b 19,7 mA (con
+~15 mA anómalos), P3 0,94 mAh por registro. Evento firmado v2 aceptado por
+producción con TLS verificado, y secuencia e identidad en NVS. Pendientes P2a,
+P4 y P5. Visión global en [ESTADO_Y_PENDIENTES](../ESTADO_Y_PENDIENTES.md).
+
+| Fecha | Entrada |
+|---|---|
+| 2026-11-04 | Solo placa por USB · LTE + GNSS · LIS3DH por I²C |
+| 2026-11-05 | Camino de la batería · P1 · P3 y primer P2b · P2b · Paso 7 · HTTPS verificado · NVS |
+
 ## 2026-11-04 · Unidad 1 · solo placa por USB
 
 Conectado: LILYGO T-A7670E por USB-C al Mac. Sin SIM, sin antenas, sin LIS3DH y

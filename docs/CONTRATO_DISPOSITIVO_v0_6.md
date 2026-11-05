@@ -70,11 +70,17 @@ el dispositivo debe firmar el buffer que transmite, no re-serializar.
 x-device-id:           <deviceId>
 x-guardian-signature:  <hex hmac del cuerpo exacto>
 content-type:          application/json
+user-agent:            Guardian-Device/2
 ```
 
-- Banco local: `http://localhost:3000` (o el host del backend). Producción
-  exigirá HTTPS con verificación completa del certificado — el firmware debe
-  traer el CA bundle y validar, nunca aceptar cualquier certificado.
+- `user-agent` no lo exige el backend, pero **sí Cloudflare** delante del
+  homelab: bloquea agentes vacíos o desconocidos (403/1010). El módem A7670 no
+  manda ninguno por defecto.
+- Banco local: `http://localhost:3000` (o el host del backend). Fuera de
+  localhost, HTTPS con verificación completa del certificado: el firmware trae
+  su paquete de CA y nunca acepta cualquier certificado. **Implementado** en el
+  firmware Rust (`firmware/bringup/certs/`, `authmode 1`), validado en la
+  unidad 1 contra `gtapi.aggc.dev` y rechazando un certificado autofirmado.
 
 El dispositivo solo habla dos endpoints:
 
@@ -157,11 +163,23 @@ mayor, de forma atómica con el resto de efectos del evento:
 - `sequence <= lastSeq` → `409 Replayed or stale sequence`, nada cambia.
 - Dos eventos con la misma secuencia nunca ambos entran (unique `(deviceId, seq)`).
 
-El firmware mantiene el contador en NVS/flash y lo incrementa SOLO tras un 202.
-Si el dispositivo se reinicia, recupera el último valor persistido y continúa
-desde ahí (+1). Ante un 409 persistente, re-sincroniza: hace poll y reintentará
-con una secuencia mayor solo cuando la conozca; nunca reinicia el contador a 0
-en caliente.
+El firmware **reserva la secuencia al crear el evento y la guarda en NVS antes
+de enviarlo** (escritura anticipada). El backend solo exige "estrictamente
+mayor", así que los huecos son válidos:
+
+- Un fallo de envío deja, como mucho, un hueco. **Nunca** se reutiliza un
+  número para un cuerpo distinto. (Revisado 2026-11-05: la regla anterior,
+  "avanzar solo tras un 202", reutilizaba el número si se perdía la respuesta
+  de un evento que sí había entrado.)
+- Reintentar un evento es reenviar **los mismos bytes con la misma secuencia**;
+  `202` o `409` cierran ese envío (`409` = ya entró o es viejo).
+- Tras reiniciarse, continúa desde el último valor guardado (+1). Nunca vuelve
+  a 0. Un dispositivo recién aprovisionado empieza en los segundos UTC
+  actuales, por encima de cualquier secuencia que pudiera haber usado antes ese
+  `deviceId`. Volver a aprovisionar la misma identidad reinicia ese punto de
+  partida.
+
+El simulador Python avanza solo tras un 202: le basta, porque no reintenta.
 
 ### 4.5 Respuestas
 
@@ -274,8 +292,10 @@ npx ts-node scripts/bench.ts provision [nombre]
 # imprime deviceId + secret (K_root en hex) + claimCode — UNA sola vez
 ```
 
-- El `deviceId` + `K_root` se graban en la flash/NVS de la placa; el `claimCode`
-  se entrega con el dispositivo (pegatina/pantalla).
+- El `deviceId` + `K_root` se graban en la NVS de la placa: en el firmware Rust,
+  con `!provision <deviceId> <secret-hex>` por la consola (se valida y el
+  secreto no se imprime). El `claimCode` se entrega con el dispositivo
+  (pegatina/pantalla).
 - El dueño lo reclama desde la app (`POST /v1/devices/claim { code }`) o, en
   banco, con `npx ts-node scripts/bench.ts claim <email> <code>`. Al reclamar se
   liga `ownerId`, se sella `claimedAt` y el código **se quema** (hash y ventana a
@@ -316,17 +336,21 @@ decisión del backend/dueño. Lo que sí debe respetar:
 
 ## 9. Checklist de integración de la placa
 
-1. [ ] HKDF-SHA256 RFC 5869 con salt=deviceId, info por canal → claves idénticas
-      a `deriveKey()` (verificar contra el backend con un evento de prueba).
-2. [ ] HMAC-SHA256 sobre los bytes exactos del cuerpo, hex en cabecera.
-3. [ ] Contador de secuencia persistente (NVS), solo avanza tras 202.
-4. [ ] `power` medido en cada emisión; `source` honesto.
+Estado del firmware Rust (`firmware/`) a 2026-11-05, unidad 1 contra producción:
+
+1. [x] HKDF-SHA256 RFC 5869 con salt=deviceId, info por canal → claves idénticas
+      a `deriveKey()`. `guardian-protocol` fija los vectores de la referencia
+      Python, y el backend aceptó los eventos de la placa (202).
+2. [x] HMAC-SHA256 sobre los bytes exactos del cuerpo, hex en cabecera.
+3. [x] Contador de secuencia persistente (NVS), reservado antes de enviar (§4.4).
+4. [~] `power` en cada emisión: hoy `reserveMv` del ADC y `source: reserve`
+      fijo (banco). Falta medir el rail del vehículo (12 V) y decidir `source`.
 5. [ ] `gnss_fix` siempre con `position`; `commandId` solo en respuesta a poll.
 6. [ ] Poll con K_command en cada wake; `LOCATE_NOW` ejecutado con timeout finito.
-7. [ ] `batteryMv` no existe en el firmware — ni en código muerto.
-8. [ ] 401/409 manejados: re-sincronización de secuencia, sin bucle de reintento
-      infinito, sin revelar nada en logs.
-9. [ ] TLS con verificación completa para cualquier despliegue fuera de localhost.
+7. [x] `batteryMv` no existe en el firmware.
+8. [~] 409 visto y reportado (secuencia vieja tras un reloj atrasado). Falta la
+      política de reintento con bandeja de salida persistente.
+9. [x] TLS con verificación completa (paquete de CA, `authmode 1`).
 
 ## 10. Dónde está cada cosa
 
@@ -342,4 +366,5 @@ decisión del backend/dueño. Lo que sí debe respetar:
 | Tests del contrato | `backend/src/devices/protocol.spec.ts`, `incident.spec.ts`, `claim-code.spec.ts`, `secret-crypto.spec.ts` |
 | Drives end-to-end | `backend/scripts/drive-pr1.ts`, `drive-pr2.ts`, `drive-pr4.ts` |
 | Bench manual + simulador de dispositivo v2 | `backend/scripts/bench.ts`, `guardian/` (Python, referencia de firmware) |
+| Firmware del dispositivo (Rust) | `firmware/`: contrato en `guardian-protocol`, caso de uso en `guardian-core/src/bringup/event.rs`, HTTPS del módem en `bringup/src/modem/http.rs` |
 | Diseño (energía, BLE, wake) | `docs/GUARDIAN_INTEGRACION_APP_DISPOSITIVO_v0_6.md` |
