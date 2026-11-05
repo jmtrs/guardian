@@ -57,7 +57,7 @@ Reglas:
 ## Tests (sin placa)
 
 ```bash
-make test-firmware          # protocol (11) + core (52) + drivers (29)
+make test-firmware          # protocol (11) + core (60) + drivers (29)
 ```
 
 Los drivers verifican el tráfico I²C exacto: la receta de interrupción AN3308,
@@ -130,6 +130,7 @@ sensor pierde alimentación, la línea flota: la placa despierta en bucle o
 | `!standby [mg]` | P2 | módem registrado en su sleep LTE (`AT+CSCLK=1`, DTR alto retenido), deep sleep, despertar por movimiento. Registrar antes (`!diag`) |
 | `!vbat` | — | rail de batería |
 | `!event` | 7 | firma un `heartbeat` v2 y lo envía por LTE (HTTPS del módem) a `/v1/events`; imprime el estado HTTP |
+| `!provision <id> <secret>` | 7 | guarda la identidad en NVS (y reinicia la secuencia de esa identidad) |
 | `!modem on\|off` | — | secuencia de potencia del módem |
 | `AT...` | — | cualquier línea sin `!` va tal cual al módem |
 
@@ -137,26 +138,30 @@ Umbral por defecto 80 mg, rango 16–2032 mg (pasos de 16 mg a ±2 g).
 
 ## Primer evento firmado (paso 7)
 
-El dispositivo de banco se aprovisiona en el backend (`createDevice`, que
-imprime `deviceId` + `secret`) y la identidad se compila en el binario desde el
-entorno. **No entra en git**: el ELF queda en `target/`, ignorado.
+**Identidad.** El dispositivo se aprovisiona en el backend (`createDevice`,
+que imprime `deviceId` + `secret`) y la identidad se guarda en la NVS de la
+placa con `!provision <deviceId> <secret-hex>`. Se valida antes de guardarla y
+el secreto nunca se imprime (la consola sí hace eco de lo tecleado: aprovisionar
+desde un equipo de confianza). Al arrancar, la consola dice de dónde sale la
+identidad. Sin NVS, el firmware acepta como respaldo de banco una identidad
+compilada desde el entorno, que tampoco entra en git:
 
 ```bash
-export GUARDIAN_DEVICE_ID=...            # lo que imprimió el aprovisionamiento
-export GUARDIAN_DEVICE_SECRET_HEX=...    # K_root, 64 hex
-# GUARDIAN_BACKEND_URL=...               # opcional, por defecto https://gtapi.aggc.dev
+export GUARDIAN_DEVICE_ID=...  GUARDIAN_DEVICE_SECRET_HEX=...   # opcional
+# GUARDIAN_BACKEND_URL=...    # por defecto https://gtapi.aggc.dev
 cargo run --release
 ```
 
-`!event` toma la hora de la red (`AT+CCLK`, a UTC), usa como secuencia los
-segundos UTC (solo banco: crece sin NVS, válida hasta 2038), firma con
-`K_event` y envía por `AT+HTTP*` con SNI. Al arrancar, la consola dice si hay
-identidad compilada.
+**Envío.** `!event` sincroniza la hora por NTP (`AT+CNTP`: Orange no manda
+NITZ y el reloj del módem retoma horas viejas tras un apagado), reserva la
+siguiente secuencia **guardándola en NVS antes de enviar** (un fallo solo deja
+un hueco, nunca repite; un dispositivo nuevo arranca desde los segundos UTC),
+firma con `K_event` y envía por `AT+HTTP*` con SNI, una cabecera por
+`USERDATA` y el certificado del servidor **verificado** contra
+[`certs/guardian-ca.pem`](bringup/certs/README.md) (`authmode 1`).
 
-**Limitación del banco:** el certificado del servidor no se verifica
-(`authmode 0`). La firma HMAC impide falsificar o alterar eventos, pero el
-contenido es legible por un intermediario. En producción: CA cargada y
-`authmode 1`.
+**Pendiente de producción:** la NVS no está cifrada (el `K_root` está en flash
+en claro): flash encryption + NVS encryption + secure boot antes de fabricar.
 
 ## Banco de consumo (P1–P5)
 

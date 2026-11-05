@@ -55,6 +55,11 @@ pub struct World {
     pub network_time: Result<UtcTime, Error>,
     pub post_status: Result<u16, Error>,
     pub posts: Vec<Posted>,
+    pub last_sequence: Result<Option<u32>, Error>,
+    pub store_sequence_result: Result<(), Error>,
+    /// Every sequence stored, and how many posts had happened when it was.
+    pub stored_sequences: Vec<(u32, usize)>,
+    pub stored_identity: Option<(String, String)>,
     pub slept: Duration,
     pub wake_arm_result: Result<(), Error>,
     pub deep_sleeps: u32,
@@ -93,6 +98,10 @@ impl Default for World {
             network_time: UtcTime::from_civil(2026, 11, 5, 11, 30, 0).map_err(|_| Error::State),
             post_status: Ok(202),
             posts: Vec::new(),
+            last_sequence: Ok(None),
+            store_sequence_result: Ok(()),
+            stored_sequences: Vec::new(),
+            stored_identity: None,
             slept: Duration::ZERO,
             wake_arm_result: Ok(()),
             deep_sleeps: 0,
@@ -229,6 +238,24 @@ impl Platform for Fake {
     }
     fn arm_motion_wake(&mut self) -> Result<(), Error> {
         self.0.borrow().wake_arm_result
+    }
+    fn last_sequence(&mut self) -> Result<Option<u32>, Error> {
+        self.0.borrow().last_sequence
+    }
+    fn store_sequence(&mut self, sequence: u32) -> Result<(), Error> {
+        let mut w = self.0.borrow_mut();
+        if w.store_sequence_result.is_ok() {
+            let posts = w.posts.len();
+            w.stored_sequences.push((sequence, posts));
+            w.last_sequence = Ok(Some(sequence));
+        }
+        w.store_sequence_result
+    }
+    fn store_identity(&mut self, device_id: &str, root_secret_hex: &str) -> Result<(), Error> {
+        let mut w = self.0.borrow_mut();
+        w.stored_identity = Some((device_id.to_owned(), root_secret_hex.to_owned()));
+        w.last_sequence = Ok(None);
+        Ok(())
     }
     fn deep_sleep(&mut self) {
         self.0.borrow_mut().deep_sleeps += 1;

@@ -35,6 +35,13 @@ pub enum Command<'a> {
     Battery,
     /// `!event`: sign and send one heartbeat to the backend (step 7).
     Event,
+    /// `!provision <device-id> <root-secret-hex>`: store the identity.
+    Provision {
+        /// Device id as printed at provisioning.
+        device_id: &'a str,
+        /// `K_root`, 64 hex digits.
+        secret: &'a str,
+    },
     /// Not a `!` line: send to the modem as-is (leading spaces trimmed).
     At(&'a str),
     /// `!` followed by an unrecognised word.
@@ -65,6 +72,7 @@ impl<'a> Command<'a> {
             "lis" => Self::no_argument(Self::Sensor, rest),
             "vbat" => Self::no_argument(Self::Battery, rest),
             "event" => Self::no_argument(Self::Event, rest),
+            "provision" => Self::provision(rest),
             "arm" => Self::threshold(rest).map_or(Self::InvalidArgument(rest), Self::Arm),
             "sleep" => Self::threshold(rest).map_or(Self::InvalidArgument(rest), Self::Sleep),
             "standby" => Self::threshold(rest).map_or(Self::InvalidArgument(rest), Self::Standby),
@@ -74,6 +82,16 @@ impl<'a> Command<'a> {
                 other => Self::InvalidArgument(other),
             },
             other => Self::Unknown(other),
+        }
+    }
+
+    /// Exactly two words. The error never echoes the input: it may hold the
+    /// secret.
+    fn provision(rest: &'a str) -> Self {
+        let mut words = rest.split_whitespace();
+        match (words.next(), words.next(), words.next()) {
+            (Some(device_id), Some(secret), None) => Self::Provision { device_id, secret },
+            _ => Self::InvalidArgument("expected: !provision <device-id> <secret-hex>"),
         }
     }
 
@@ -131,6 +149,20 @@ mod tests {
         assert_eq!(Command::parse("!lis"), Command::Sensor);
         assert_eq!(Command::parse("!vbat"), Command::Battery);
         assert_eq!(Command::parse("!event"), Command::Event);
+        assert_eq!(
+            Command::parse("!provision dev-1  abcd"),
+            Command::Provision {
+                device_id: "dev-1",
+                secret: "abcd"
+            }
+        );
+        for bad in ["!provision", "!provision dev-1", "!provision a b c"] {
+            assert_eq!(
+                Command::parse(bad),
+                Command::InvalidArgument("expected: !provision <device-id> <secret-hex>"),
+                "{bad}"
+            );
+        }
         assert_eq!(Command::parse("!modem on"), Command::ModemOn);
         assert_eq!(Command::parse("!modem  off"), Command::ModemOff);
     }

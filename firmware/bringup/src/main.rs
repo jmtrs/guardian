@@ -11,6 +11,7 @@ mod hold;
 mod identity;
 mod modem;
 mod platform;
+mod store;
 mod wiring;
 
 use esp_idf_svc::hal::adc::attenuation::DB_12;
@@ -22,6 +23,7 @@ use esp_idf_svc::hal::i2c::{I2cConfig, I2cDriver};
 use esp_idf_svc::hal::peripherals::Peripherals;
 use esp_idf_svc::hal::uart::{config::Config as UartConfig, UartDriver};
 use esp_idf_svc::hal::units::Hertz;
+use esp_idf_svc::nvs::EspDefaultNvsPartition;
 use esp_idf_svc::sys::EspError;
 use guardian_core::bringup::Bringup;
 use guardian_drivers::lis3dh::Lis3dh;
@@ -45,7 +47,13 @@ fn main() -> Result<(), EspError> {
         ..Default::default()
     };
     let battery = AdcChannelDriver::new(battery_adc, board.battery_sense, &battery_config)?;
-    let platform = Esp32Platform::new(battery, board::BATTERY_DIVIDER_X1000, wake_pad);
+    let store = store::Store::open(EspDefaultNvsPartition::take()?)?;
+    // NVS first (provisioned device), then the build environment (bench).
+    let (identity, identity_source) = match store.identity() {
+        Some(found) => (Some(found), "NVS"),
+        None => (identity::from_build(), "build environment"),
+    };
+    let platform = Esp32Platform::new(battery, board::BATTERY_DIVIDER_X1000, wake_pad, store);
 
     let modem_pads = (board.modem_tx.pin(), board.modem_rx.pin());
     let modem_uart = UartDriver::new(
@@ -97,14 +105,13 @@ fn main() -> Result<(), EspError> {
     )?);
 
     let mut service = Bringup::new(modem, motion, platform, Stdout);
-    let identity = identity::from_build();
     if let Some(Ok(identity)) = identity.clone() {
         service = service.with_identity(identity);
     }
     service.announce();
     match identity {
         Some(Ok(_)) => println!(
-            "device identity: compiled in, backend {}",
+            "device identity: from {identity_source}, backend {}",
             identity::BACKEND_URL
         ),
         Some(Err(e)) => println!("device identity INVALID ({e}): !event disabled"),

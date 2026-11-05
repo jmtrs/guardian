@@ -261,3 +261,16 @@ certificado comprobada contra el reloj sincronizado por NTP.
 | GET a `badssl.com` (certificado válido) | `200` |
 
 La limitación `authmode 0` del primer evento queda cerrada.
+
+## 2026-11-05 · Unidad 1 · Identidad y secuencia en NVS
+
+Firmware compilado **sin** identidad (arranque: `device identity: none`).
+
+| Paso | Resultado |
+|---|---|
+| `!provision <id> <secret>` | `identity stored ...; sequence restarts` (el secreto no se imprime) |
+| `!event` × 2 | seq 1793881796 (sembrada de los segundos UTC, por encima del último `lastSeq`) y 1793881797, ambas **202** |
+| Reset y `!event` | `device identity: from NVS`, seq **1793881798**, **202** |
+
+La secuencia se guarda en NVS antes de enviar: un fallo deja un hueco y nunca
+repite. Pendiente: cifrado de NVS y de flash.

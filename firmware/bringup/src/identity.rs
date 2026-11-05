@@ -1,9 +1,10 @@
-//! Bench device identity, injected at build time.
+//! Fallback device identity for the bench, injected at build time.
 //!
-//! `GUARDIAN_DEVICE_ID` and `GUARDIAN_DEVICE_SECRET_HEX` (what provisioning
-//! prints) are read from the build environment and compiled into this
-//! binary, which never enters git. Production stores them in NVS/eFuse at
-//! manufacturing instead. Without them `!event` explains how to build.
+//! The device normally reads its identity from NVS, written once with
+//! `!provision` (see [`Store`](crate::store::Store)). When NVS holds none,
+//! `GUARDIAN_DEVICE_ID` and `GUARDIAN_DEVICE_SECRET_HEX` from the build
+//! environment are used, compiled into this binary (which never enters git).
+//! Without either, `!event` explains how to provide one.
 
 use guardian_core::bringup::DeviceIdentity;
 use guardian_protocol::identity::{DeviceId, RootSecret};

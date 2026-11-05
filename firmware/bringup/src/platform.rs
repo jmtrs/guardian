@@ -1,4 +1,5 @@
-//! ESP32 platform adapter: delays, identity, battery ADC, deep sleep.
+//! ESP32 platform adapter: delays, identity, battery ADC, persistent state
+//! (NVS, see [`Store`]), deep sleep.
 
 use std::thread;
 use std::time::Duration;
@@ -11,6 +12,7 @@ use guardian_core::ports::{Identity, Platform, WakeCause};
 use guardian_core::Error;
 
 use crate::hold;
+use crate::store::Store;
 
 /// Samples averaged per battery reading.
 const BATTERY_SAMPLES: u32 = 16;
@@ -28,17 +30,24 @@ pub struct Esp32Platform<C: AdcChannel> {
     divider_x1000: u32,
     /// RTC pad used as ext0 wake source (active HIGH).
     motion_wake: PinId,
+    store: Store,
 }
 
 impl<C: AdcChannel> Esp32Platform<C> {
     /// Build the adapter. Pad holds from a previous sleep are released by
     /// [`Board::take`](crate::board::Board::take), not here.
     #[must_use]
-    pub fn new(battery: BatteryChannel<C>, divider_x1000: u32, motion_wake: PinId) -> Self {
+    pub fn new(
+        battery: BatteryChannel<C>,
+        divider_x1000: u32,
+        motion_wake: PinId,
+        store: Store,
+    ) -> Self {
         Self {
             battery,
             divider_x1000,
             motion_wake,
+            store,
         }
     }
 }
@@ -95,6 +104,18 @@ impl<C: AdcChannel> Platform for Esp32Platform<C> {
             log::error!("cannot arm ext0 wake: {e}");
             Error::Io
         })
+    }
+
+    fn last_sequence(&mut self) -> Result<Option<u32>, Error> {
+        self.store.last_sequence()
+    }
+
+    fn store_sequence(&mut self, sequence: u32) -> Result<(), Error> {
+        self.store.store_sequence(sequence)
+    }
+
+    fn store_identity(&mut self, device_id: &str, root_secret_hex: &str) -> Result<(), Error> {
+        self.store.store_identity(device_id, root_secret_hex)
     }
 
     fn deep_sleep(&mut self) {

@@ -200,6 +200,28 @@ pub trait Platform {
     /// If the wake source cannot be armed: sleeping would never wake on motion.
     fn arm_motion_wake(&mut self) -> Result<()>;
 
+    /// Last event sequence durably recorded, `None` on a device that never
+    /// sent one.
+    ///
+    /// # Errors
+    /// Storage unreadable: sending then could reuse a sequence.
+    fn last_sequence(&mut self) -> Result<Option<u32>>;
+
+    /// Durably record `sequence` as used. Called before the event leaves, so
+    /// a crash after sending can only skip a value, never repeat it.
+    ///
+    /// # Errors
+    /// Storage write failure: the event must not be sent.
+    fn store_sequence(&mut self, sequence: u32) -> Result<()>;
+
+    /// Durably store the device identity (factory provisioning) and forget
+    /// the sequence of any previous identity. The secret is already
+    /// validated; adapters must never log it.
+    ///
+    /// # Errors
+    /// Storage write failure.
+    fn store_identity(&mut self, device_id: &str, root_secret_hex: &str) -> Result<()>;
+
     /// Enter deep sleep, keeping latched pads. Requires
     /// [`arm_motion_wake`](Self::arm_motion_wake) first.
     ///

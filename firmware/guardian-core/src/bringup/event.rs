@@ -35,16 +35,41 @@ impl DeviceIdentity {
 }
 
 impl<M: Modem + Uplink, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
-    /// Sign a `heartbeat` and `POST` it to the backend.
-    ///
-    /// Bench simplification: the sequence is the UTC time in seconds, which
-    /// only grows and needs no persistent counter (valid until 2038, the
-    /// backend's `2^31` limit). Production keeps the counter in NVS. The
-    /// device runs on its reserve battery here, so `vehicleMv` is 0.
+    /// Store a validated identity (factory provisioning) and use it from now
+    /// on. The secret is never printed.
     ///
     /// # Errors
-    /// No identity, modem or network time unavailable, an invalid value for
-    /// the contract, no HTTP exchange, or a status other than 202.
+    /// [`Error::State`] for an invalid id or secret, storage errors.
+    pub fn provision(&mut self, device_id: &str, secret_hex: &str) -> Result<()> {
+        let (Ok(device), Ok(root)) = (DeviceId::new(device_id), RootSecret::from_hex(secret_hex))
+        else {
+            say!(
+                self,
+                "provision refused: id must be [A-Za-z0-9_-], secret 64 hex digits"
+            );
+            return Err(Error::State);
+        };
+        self.platform
+            .store_identity(device_id, secret_hex)
+            .inspect_err(|e| say!(self, "identity not stored: {e}"))?;
+        self.identity = Some(DeviceIdentity::new(device, &root));
+        say!(
+            self,
+            "identity stored for device {device_id}; sequence restarts"
+        );
+        Ok(())
+    }
+
+    /// Sign a `heartbeat` and `POST` it to the backend.
+    ///
+    /// The sequence is persisted before the event leaves (see
+    /// [`next_sequence`]). The device runs on its reserve battery here, so
+    /// `vehicleMv` is 0.
+    ///
+    /// # Errors
+    /// No identity, modem, network time or sequence storage unavailable, an
+    /// invalid value for the contract, no HTTP exchange, or a status other
+    /// than 202.
     pub fn send_heartbeat(&mut self) -> Result<u16> {
         let Some(identity) = self.identity.clone() else {
             say!(
@@ -58,8 +83,7 @@ impl<M: Modem + Uplink, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P,
             .modem
             .network_time()
             .inspect_err(|e| say!(self, "network time unavailable: {e}"))?;
-        let sequence =
-            sequence_for(now).inspect_err(|_| say!(self, "clock out of range: {now}"))?;
+        let sequence = self.reserve_sequence(now)?;
         let reserve = self
             .platform
             .battery_mv()
@@ -94,11 +118,34 @@ impl<M: Modem + Uplink, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P,
     }
 }
 
-/// Seconds since 1970 as the bench sequence.
-fn sequence_for(now: UtcTime) -> Result<u32> {
-    u32::try_from(now.unix())
-        .ok()
-        .filter(|&s| s > 0 && s < guardian_protocol::envelope::SEQUENCE_LIMIT)
+impl<M: Modem + Uplink, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
+    /// Pick the next sequence and record it durably before it is used.
+    fn reserve_sequence(&mut self, now: UtcTime) -> Result<u32> {
+        let last = self
+            .platform
+            .last_sequence()
+            .inspect_err(|e| say!(self, "sequence storage unreadable: {e}"))?;
+        let next = next_sequence(last, now).inspect_err(|_| say!(self, "sequence exhausted"))?;
+        self.platform
+            .store_sequence(next)
+            .inspect_err(|e| say!(self, "sequence not stored, not sending: {e}"))?;
+        Ok(next)
+    }
+}
+
+/// One above the last recorded sequence. A device that never sent seeds
+/// from the UTC seconds: always above anything a previous firmware (or the
+/// time-based bench scheme) could have used for this id, while leaving
+/// ~350 million events before the backend's `2^31` limit.
+///
+/// # Errors
+/// [`Error::State`] once the limit is reached or the clock is unusable.
+pub fn next_sequence(last: Option<u32>, now: UtcTime) -> Result<u32> {
+    let next = match last {
+        Some(last) => last.checked_add(1),
+        None => u32::try_from(now.unix()).ok(),
+    };
+    next.filter(|&s| s > 0 && s < guardian_protocol::envelope::SEQUENCE_LIMIT)
         .ok_or(Error::State)
 }
 

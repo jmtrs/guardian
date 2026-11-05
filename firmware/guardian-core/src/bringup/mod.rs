@@ -8,7 +8,7 @@ mod event;
 mod modem;
 mod motion;
 
-pub use event::DeviceIdentity;
+pub use event::{next_sequence, DeviceIdentity};
 
 use core::fmt::{self, Write};
 use core::time::Duration;
@@ -101,6 +101,7 @@ impl<M: Modem + Uplink, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P,
              \x20 !standby [mg]  P2: modem in LTE sleep, deep sleep until motion\n\
              \x20 !vbat          battery rail\n\
              \x20 !event         step 7: sign and send a heartbeat to the backend\n\
+             \x20 !provision <id> <secret-hex>  store the device identity\n\
              \x20 !help\n",
             WATCH_DURATION.as_secs(),
             Threshold::DEFAULT.mg()
@@ -143,6 +144,9 @@ impl<M: Modem + Uplink, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P,
             Command::Battery => self.battery(),
             Command::Event => {
                 let _ = self.send_heartbeat();
+            }
+            Command::Provision { device_id, secret } => {
+                let _ = self.provision(device_id, secret);
             }
             Command::At(text) => self.passthrough(text),
             Command::Unknown(word) => say!(self, "unknown command: !{word} (try !help)"),
