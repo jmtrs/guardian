@@ -10,7 +10,9 @@ La copia del PDF aportada para analizar Guardian tiene 5 páginas y SHA-256 `cda
 | --- | --- | --- |
 | `U7 CN3065`, `VIN`, `BAT`, `TEMP` | Cargador Li-ion: entrada de carga, terminal de batería y pin de vigilancia térmica. | Su función térmica **no se presupone activa** en la placa. |
 | `N9 0R`, desde `TEMP` a `GND` | El esquema muestra `TEMP` unido a masa mediante un puente de 0 Ω. | Según el [datasheet del CN3065](https://files.seeedstudio.com/wiki/Lipo_Rider_Pro/res/DSE-CN3065.pdf), poner `TEMP` a masa **deshabilita** el control de temperatura, no la carga. |
-| `U8 DW06D` | Circuito de protección eléctrica de la ruta de batería según el diseño de referencia. | No equivale a supervisión térmica verificada de la celda. |
+| `U8 DW06D` | Protección de una celda Li-ion con los dos MOSFET integrados, **en el lado negativo**: `S2`/`VSS` al − de la batería (nodo B−), `S1` y `V−` (con 1 kΩ, `N4`) a `GND`, `VDD` a `V_BAT` por 100 Ω (`N6`) con `C40` de 100 nF. Corta carga o descarga por sobretensión, subtensión, sobrecorriente o cortocircuito. | No equivale a supervisión térmica verificada de la celda. **Unidad 1: dañada el 2026-11-05** (ver [registro](BRINGUP_LOG.md)). |
+| `Q4 AO3400` | MOSFET N entre el − del conector de batería `PY1` (pin 2) y el nodo B−, con la puerta a `V_BAT` por 100 Ω (`N7`): **protección contra inversión de polaridad**. Con la celda bien puesta conduce; invertida, corta. | Queda en serie con U8: una caída medida entre el − del portapilas y `GND` incluye Q4 + U8. |
+| `PY1` | Conector de batería (2P 1,27 mm): pin 1 a `V_BAT` (+), pin 2 al − (hacia Q4). | El camino de la batería es: celda + → `V_BAT`; celda − → `PY1`.2 → Q4 → B− → U8 → `GND`. |
 | `D18`, `Q5`, `Q6`, `DVDD4V2` | Ruta de selección/alimentación desde USB y batería. | La conmutación de fuentes y posibles reinicios se ensayarán en la revisión recibida. |
 | `IO35` y divisor `R7/R9` | Lectura analógica de tensión según el esquema. | Leer tensión por firmware no permite deducir ni bloquear por sí solo la temperatura de carga. |
 
