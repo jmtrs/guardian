@@ -5,7 +5,6 @@ mod support;
 use guardian_core::bringup::{next_sequence, DeviceIdentity};
 use guardian_core::Error;
 use guardian_protocol::identity::{DeviceId, RootSecret};
-use guardian_protocol::time::UtcTime;
 use support::Fake;
 
 const ROOT: &str = "00000000000000000000000000000000ffffffffffffffffffffffffffffffff";
@@ -17,16 +16,12 @@ fn identity() -> DeviceIdentity {
     )
 }
 
-fn now() -> UtcTime {
-    UtcTime::from_civil(2026, 11, 5, 11, 30, 0).unwrap()
-}
-
 #[test]
-fn next_sequence_increments_or_seeds_from_the_clock() {
-    assert_eq!(next_sequence(Some(41), now()), Ok(42));
-    assert_eq!(next_sequence(None, now()), Ok(1_793_878_200));
-    assert_eq!(next_sequence(Some((1 << 31) - 1), now()), Err(Error::State));
-    assert_eq!(next_sequence(Some(u32::MAX), now()), Err(Error::State));
+fn next_sequence_increments_or_starts_at_one() {
+    assert_eq!(next_sequence(Some(41)), Ok(42));
+    assert_eq!(next_sequence(None), Ok(1));
+    assert_eq!(next_sequence(Some((1 << 31) - 1)), Err(Error::State));
+    assert_eq!(next_sequence(Some(u32::MAX)), Err(Error::State));
 }
 
 #[test]
@@ -110,7 +105,7 @@ fn reprovisioning_the_same_device_keeps_counting() {
 }
 
 #[test]
-fn provisioning_another_device_restarts_from_the_clock() {
+fn provisioning_another_device_restarts_from_one() {
     let fake = Fake::with(|w| {
         w.stored_identity = Some(("old-device".to_owned(), ROOT.to_owned()));
         w.last_sequence = Ok(Some(5));
@@ -118,5 +113,5 @@ fn provisioning_another_device_restarts_from_the_clock() {
     let mut s = fake.service();
     s.handle_line(&format!("!provision dev-test-1 {ROOT}"));
     assert_eq!(s.send_heartbeat(), Ok(202));
-    assert_eq!(fake.world().stored_sequences[0].0, 1_793_878_200);
+    assert_eq!(fake.world().stored_sequences[0].0, 1);
 }

@@ -86,19 +86,21 @@ sería viable si se explican los ~15 mA de más del módem en sleep.
 
 ### Seguridad, antes de que una placa salga del banco
 - [ ] **Cifrado de flash + NVS y secure boot.** Plantilla y gate read-only en
-      `firmware/production/`; falta el target productivo y validarlo en una
-      placa designada. `K_root` del bring-up sigue en claro.
+      `firmware/production/`; el target productivo reversible ya compila, pero
+      falta resolver el perfil seguro y validarlo en una placa designada.
+      `K_root` de la unidad de bring-up sigue en claro.
 - [ ] **Aprovisionamiento de fábrica.** Hoy `!provision` por consola, que hace
       eco de lo tecleado. Falta una herramienta que no lo muestre.
 - [ ] **Hora autenticada.** NTP no está autenticado. Hoy solo alimenta
       `observedAtUtc` (la secuencia es un contador), pero conviene contrastarla
       con la hora GNSS.
-- [ ] Mantener el paquete de CA (`firmware/bringup/certs/README.md`).
+- [ ] Mantener el paquete de CA (`firmware/guardian-esp32/certs/README.md`).
 
 ### Firmware de producción
 - [x] Dominio host de la máquina de estados: boot/wake → outbox → motion →
       comandos → GNSS/heartbeat → arm → sleep (`guardian-device`).
-- [ ] Composition root y adapters ESP-IDF de esa máquina en la LILYGO.
+- [x] Primer composition root ESP-IDF: outbox NVS con CRC, movimiento durable,
+      reintento exacto y wake ext0+timer. Sigue siendo candidato de banco.
 - [ ] `suspected_movement` con debounce y backoff (contrato §8).
 - [x] Encoder `gnss_fix` con posición validada y `commandId` opcional.
 - [ ] Adapter GNSS productivo y medida P4.
@@ -108,7 +110,9 @@ sería viable si se explican los ~15 mA de más del módem en sleep.
       según v0.7).
 - [x] Dominio de bandeja: persiste bytes+secuencia antes de red, bloquea
       sobrescritura y reenvía exactamente hasta 202/409.
-- [ ] Adapter NVS cifrado y prueba de corte eléctrico durante escritura/envío.
+- [x] Adapter NVS con registro único versionado/CRC y orden commit→clear.
+- [ ] Activar NVS cifrada en placa designada y probar cortes durante
+      escritura/envío.
 - [ ] `power`: medir el rail de 12 V y decidir `source` (hoy `reserve` fijo).
 - [ ] Tolerar la transición VBUS/12 V → batería (el módem se reinicia).
 - [ ] Mantener `POWER_EN` durante un reset del ESP32.

@@ -10,6 +10,7 @@ use core::fmt;
 use hkdf::Hkdf;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
+use zeroize::Zeroize;
 
 use crate::ProtocolError;
 
@@ -103,6 +104,12 @@ impl fmt::Debug for RootSecret {
     }
 }
 
+impl Drop for RootSecret {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
+
 /// Channels with their own key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Context {
@@ -148,6 +155,12 @@ impl ChannelKey {
 impl fmt::Debug for ChannelKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("ChannelKey(<redacted>)")
+    }
+}
+
+impl Drop for ChannelKey {
+    fn drop(&mut self) {
+        self.0.zeroize();
     }
 }
 

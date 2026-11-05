@@ -14,5 +14,9 @@
 #![forbid(unsafe_code)]
 
 pub mod cycle;
+pub mod motion;
 pub mod outbox;
 pub mod ports;
+pub mod record;
+pub mod storage;
+pub mod uplink;

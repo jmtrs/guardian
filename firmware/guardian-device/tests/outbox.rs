@@ -1,7 +1,9 @@
 //! Durable outbox failure and retry tests.
 
 use guardian_core::error::{Error, Result};
-use guardian_device::outbox::{drain, stage, DrainOutcome, PendingEvent, Receipt};
+use guardian_device::outbox::{
+    drain, stage, stage_deferred_motion, DrainOutcome, PendingEvent, Receipt,
+};
 use guardian_device::ports::{EventStore, EventUplink};
 use guardian_protocol::envelope::{encode_event, Kind, Power, PowerSource};
 use guardian_protocol::identity::DeviceId;
@@ -11,7 +13,10 @@ use guardian_protocol::time::UtcTime;
 struct Store {
     pending: Option<PendingEvent>,
     last: Option<u32>,
-    deferred_motion: bool,
+    motion_watermark: u32,
+    deferred_motion: Option<u32>,
+    fail_clear_deferred: bool,
+    fail_clear_pending: bool,
     operations: Vec<&'static str>,
 }
 
@@ -38,24 +43,39 @@ impl EventStore for Store {
 
     fn clear_pending(&mut self) -> Result<()> {
         self.operations.push("clear");
+        if self.fail_clear_pending {
+            return Err(Error::Io);
+        }
         self.pending = None;
         Ok(())
     }
 
-    fn defer_motion(&mut self) -> Result<()> {
+    fn defer_motion(&mut self) -> Result<u32> {
         self.operations.push("defer_motion");
-        self.deferred_motion = true;
-        Ok(())
+        let next = self.motion_watermark.checked_add(1).ok_or(Error::State)?;
+        self.motion_watermark = next;
+        self.deferred_motion = Some(next);
+        Ok(next)
     }
 
-    fn motion_deferred(&mut self) -> Result<bool> {
+    fn deferred_motion_generation(&mut self) -> Result<Option<u32>> {
         Ok(self.deferred_motion)
     }
 
-    fn clear_deferred_motion(&mut self) -> Result<()> {
+    fn clear_deferred_motion(&mut self, generation: u32) -> Result<()> {
         self.operations.push("clear_deferred_motion");
-        self.deferred_motion = false;
-        Ok(())
+        if self.fail_clear_deferred {
+            return Err(Error::Io);
+        }
+        match self.deferred_motion {
+            None => Ok(()),
+            Some(current) if current == generation => {
+                self.deferred_motion = None;
+                Ok(())
+            }
+            Some(current) if current > generation => Ok(()),
+            Some(_) => Err(Error::State),
+        }
     }
 }
 
@@ -137,4 +157,127 @@ fn never_overwrites_pending_or_reuses_a_sequence() {
     store.pending = None;
     store.last = Some(9);
     assert_eq!(stage(&mut store, &body(9)), Err(Error::State));
+}
+
+#[test]
+fn terminal_motion_delivery_clears_flag_before_pending_record() {
+    let mut store = Store::default();
+    let generation = store.defer_motion().unwrap();
+    stage_deferred_motion(&mut store, &body(10), generation).unwrap();
+    store.operations.clear();
+    let mut uplink = Uplink {
+        answers: vec![Ok(202)],
+        bodies: Vec::new(),
+    };
+
+    assert!(matches!(
+        drain(&mut store, &mut uplink),
+        Ok(DrainOutcome::Delivered { sequence: 10, .. })
+    ));
+    assert_eq!(store.deferred_motion, None);
+    assert_eq!(
+        store.operations,
+        ["commit", "clear_deferred_motion", "clear"]
+    );
+}
+
+#[test]
+fn failed_motion_flag_clear_retains_marked_record_for_recovery() {
+    let mut store = Store {
+        fail_clear_deferred: true,
+        ..Store::default()
+    };
+    let generation = store.defer_motion().unwrap();
+    stage_deferred_motion(&mut store, &body(11), generation).unwrap();
+    let mut accepted = Uplink {
+        answers: vec![Ok(202)],
+        bodies: Vec::new(),
+    };
+
+    assert_eq!(drain(&mut store, &mut accepted), Err(Error::Io));
+    assert_eq!(store.last, Some(11));
+    assert_eq!(store.deferred_motion, Some(generation));
+    assert_eq!(
+        store.pending.as_ref().unwrap().deferred_motion_generation(),
+        Some(generation)
+    );
+
+    store.fail_clear_deferred = false;
+    let mut replay = Uplink {
+        answers: vec![Ok(409)],
+        bodies: Vec::new(),
+    };
+    assert!(matches!(
+        drain(&mut store, &mut replay),
+        Ok(DrainOutcome::Delivered { sequence: 11, .. })
+    ));
+    assert_eq!(store.deferred_motion, None);
+    assert!(store.pending.is_none());
+}
+
+#[test]
+fn delivering_one_motion_generation_preserves_a_newer_one() {
+    let mut store = Store::default();
+    let first = store.defer_motion().unwrap();
+    stage_deferred_motion(&mut store, &body(12), first).unwrap();
+    let second = store.defer_motion().unwrap();
+    assert!(second > first);
+    let mut accepted = Uplink {
+        answers: vec![Ok(202)],
+        bodies: Vec::new(),
+    };
+
+    assert!(matches!(
+        drain(&mut store, &mut accepted),
+        Ok(DrainOutcome::Delivered { sequence: 12, .. })
+    ));
+    assert!(store.pending.is_none());
+    assert_eq!(store.deferred_motion, Some(second));
+
+    stage_deferred_motion(&mut store, &body(13), second).unwrap();
+    let mut next = Uplink {
+        answers: vec![Ok(202)],
+        bodies: Vec::new(),
+    };
+    assert!(matches!(
+        drain(&mut store, &mut next),
+        Ok(DrainOutcome::Delivered { sequence: 13, .. })
+    ));
+    assert_eq!(store.deferred_motion, None);
+}
+
+#[test]
+fn power_cut_after_consuming_old_generation_cannot_erase_new_motion() {
+    let mut store = Store::default();
+    let first = store.defer_motion().unwrap();
+    stage_deferred_motion(&mut store, &body(14), first).unwrap();
+    store.fail_clear_pending = true;
+    let mut accepted = Uplink {
+        answers: vec![Ok(202)],
+        bodies: Vec::new(),
+    };
+
+    assert_eq!(drain(&mut store, &mut accepted), Err(Error::Io));
+    assert_eq!(store.last, Some(14));
+    assert_eq!(store.deferred_motion, None);
+    assert!(store.pending.is_some());
+
+    // Reboot preserves the monotonic watermark even though generation one was
+    // already consumed. A newly latched movement therefore becomes generation
+    // two before the old pending record is replayed.
+    let second = store.defer_motion().unwrap();
+    assert_eq!(second, first + 1);
+    store.fail_clear_pending = false;
+    let mut replay = Uplink {
+        answers: vec![Ok(409)],
+        bodies: Vec::new(),
+    };
+    assert!(matches!(
+        drain(&mut store, &mut replay),
+        Ok(DrainOutcome::Delivered { sequence: 14, .. })
+    ));
+    assert!(store.pending.is_none());
+    assert_eq!(store.deferred_motion, Some(second));
+
+    stage_deferred_motion(&mut store, &body(15), second).unwrap();
 }

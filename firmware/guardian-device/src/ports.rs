@@ -45,20 +45,22 @@ pub trait EventStore {
     /// ordinary producers run.
     ///
     /// # Errors
-    /// Durable storage could not commit the flag.
-    fn defer_motion(&mut self) -> Result<()>;
+    /// Durable storage could not commit the generation.
+    fn defer_motion(&mut self) -> Result<u32>;
 
-    /// Whether a coalesced motion observation still needs an event.
+    /// Generation of the newest coalesced motion that still needs an event.
     ///
     /// # Errors
     /// Durable storage is unreadable or fails integrity checks.
-    fn motion_deferred(&mut self) -> Result<bool>;
+    fn deferred_motion_generation(&mut self) -> Result<Option<u32>>;
 
-    /// Clear the coalesced flag only after its event has been staged.
+    /// Consume `generation` only after its marked event obtained a terminal
+    /// backend receipt. A newer generation must remain deferred. The pending
+    /// record is cleared afterwards.
     ///
     /// # Errors
-    /// Durable storage could not clear the flag.
-    fn clear_deferred_motion(&mut self) -> Result<()>;
+    /// Durable storage could not reconcile the generation.
+    fn clear_deferred_motion(&mut self, generation: u32) -> Result<()>;
 }
 
 /// Event transport. It must sign and send `body` without re-serialising it.

@@ -1,45 +1,72 @@
-# Gate de firmware de producción
+# Firmware de producción (candidato de banco)
 
-Este directorio no es un firmware flasheable. Separa dos cosas que no deben
-mezclarse con `bringup`:
+Este directorio contiene ya un binario ESP-IDF separado de `bringup`. El
+primer corte ejecuta una única cadena productiva:
 
-- `guardian-device`: dominio productivo probado en host (outbox y ciclo);
-- el gate de configuración irreversible que deberá consumir el futuro binario
-  ESP-IDF de producción.
+1. recupera una outbox NVS y reintenta exactamente sus bytes;
+2. hace durable cualquier movimiento antes de limpiar el latch LIS3DH;
+3. crea `suspected_movement` cuando el slot queda libre;
+4. firma con `K_event`, acepta solo HTTP 202/409 como terminal;
+5. arma wake por IO34 y timer, apaga/retiene el módem y duerme.
 
-`sdkconfig.security.defaults` es una plantilla de revisión, no un default
+La identidad se admite solo desde NVS ya aprovisionada. Una lectura parcial,
+identidad inválida, blob truncado o CRC incorrecto detiene el ciclo sin enviar.
+`K_root` y `K_event` se zeroizan al salir de memoria.
+
+## Compilar sin tocar la placa
+
+```bash
+. ~/export-esp.sh
+cd firmware/production
+cargo clippy --release -- -D warnings
+cargo build --release
+```
+
+CI ejecuta ambos comandos para `xtensa-esp32-espidf`. Ninguno flashea ni
+modifica eFuses.
+
+## Flash reversible del candidato
+
+Este no es todavía un firmware de fabricación. Antes de grabar la LILYGO con
+el banco montado hay que desconectar físicamente el cable 11
+(`ESP32-S3 GPIO17 -> LILYGO RX`), que compite con el CH340. El runner lo exige:
+
+```bash
+GUARDIAN_CABLE_11_DISCONNECTED=1 cargo run --release
+```
+
+El build valida `partitions.csv` con la herramienta oficial de ESP-IDF y deja
+su resultado como `partition-table.bin`; el runner graba exactamente ese
+artefacto. La tabla preserva la NVS en `0x9000` y reserva `nvs_keys`. No se
+activa cifrado en la unidad de bring-up.
+
+## Gate irreversible para una placa designada
+
+`sdkconfig.security.defaults` es una plantilla de revisión, no el default
 activo. Secure Boot y Flash Encryption cambian eFuses en el primer arranque;
-por eso ningún comando de CI ni de este repositorio los activa o flashea.
+ningún comando ordinario ni CI los habilita.
 
-## Gate antes de la primera placa designada
-
-1. Crear el binario ESP-IDF productivo y una tabla con partición `nvs_keys`.
-2. Generar la clave privada RSA-3072 en un equipo de fabricación; nunca
-   guardarla dentro del repositorio ni en Git.
-3. Resolver el `sdkconfig` real y comprobarlo:
+1. Generar la clave RSA-3072 fuera del repositorio y del equipo de desarrollo.
+2. Resolver un `sdkconfig` de fabricación y validarlo:
 
    ```bash
    firmware/production/check-security-config.sh path/al/sdkconfig release path/al/proyecto
    ```
 
-4. Guardar backup de eFuses, probar OTA/recuperación y firmar el acta de placa.
-5. Solo entonces ejecutar el primer arranque seguro en esa unidad, nunca en la
-   placa de bring-up sin una decisión explícita.
+3. Guardar backup de eFuses y probar recuperación/OTA en una placa designada.
+4. Ejecutar power-cut y recuperación NVS antes de autorizar fabricación.
 
-El gate exige Secure Boot v2 (la unidad medida es ESP32 rev v3.1), clave
-RSA-3072 válida y externa al repositorio, ROM download inseguro desactivado,
-cifrado de flash en modo `release`, NVS cifrada y ausencia de excepciones
-inseguras.
-Se basa en la documentación de Espressif para [Secure Boot v2](https://docs.espressif.com/projects/esp-idf/en/v5.5.6/esp32/security/secure-boot-v2.html),
-[Flash Encryption](https://docs.espressif.com/projects/esp-idf/en/v5.5.6/esp32/security/flash-encryption.html)
-y [NVS Encryption](https://docs.espressif.com/projects/esp-idf/en/v5.5.1/esp32/api-reference/storage/nvs_encryption.html).
+El gate exige Secure Boot v2, flash encryption `release`, NVS cifrada y ROM
+download inseguro desactivado. Nunca debe aplicarse a la unidad de bring-up sin
+una decisión explícita.
 
-## Gates físicos que el software no puede cerrar
+## Pendiente antes de llamarlo producción
 
-- P4: GNSS con LTE;
-- P5: conjunto completo alimentado desde 12 V;
-- explicar los ~15 mA extra de P2b;
-- validar transición 12 V → reserva, térmica y supervisor;
-- confirmar que la outbox sobrevive a cortes reales durante escritura/envío.
+- prueba real de cortes durante escritura y envío;
+- P4 GNSS+LTE y P5 desde 12 V;
+- clasificación real del rail 12 V/reserva;
+- heartbeat, comandos y GNSS productivos;
+- calibración ADC, térmica, supervisor y transición 12 V -> reserva;
+- debounce/backoff de movimiento afinado en vehículo.
 
-Hasta que todos pasen, el estado es “candidato de banco”, no producción.
+Hasta cerrar esos gates, el artefacto es “candidato de banco”.

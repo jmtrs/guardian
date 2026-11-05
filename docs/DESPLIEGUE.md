@@ -86,7 +86,7 @@ si la cuenta no tiene ninguno, y la app muestra el primero (pendiente).
 - La placa habla por HMAC (no OTP): funciona aunque el email no esté configurado.
 - HTTPS público lo da Cloudflare; el firmware valida el certificado contra su
   paquete de CA (contrato §3). Si Cloudflare cambia de CA, ver
-  `firmware/bringup/certs/README.md`.
+  `firmware/guardian-esp32/certs/README.md`.
 - Email: con `RESEND_API_KEY` y el remitente de pruebas
   `onboarding@resend.dev`, Resend solo entrega al dueño de la cuenta de Resend.
   Para cualquier usuario hay que verificar `aggc.dev` en Resend (registros DNS

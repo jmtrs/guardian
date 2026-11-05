@@ -20,7 +20,7 @@ const UPLOAD_TIMEOUT: Duration = Duration::from_secs(12);
 const ACTION_WAIT: Duration = Duration::from_secs(60);
 /// NTP servers for the modem clock, tried in order. Plain NTP is
 /// unauthenticated: the time feeds `observedAtUtc`, certificate date checks
-/// and the first sequence seed only; later sequences come from NVS.
+/// only. Event sequences are monotonic NVS state and never depend on NTP.
 const NTP_SERVERS: [&str; 3] = ["pool.ntp.org", "time.cloudflare.com", "time.google.com"];
 const NTP_WAIT: Duration = Duration::from_secs(20);
 /// Device-channel user agent: Cloudflare blocks unknown or empty ones.

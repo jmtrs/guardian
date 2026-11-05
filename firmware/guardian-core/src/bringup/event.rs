@@ -4,7 +4,6 @@ use core::fmt::Write;
 
 use guardian_protocol::envelope::{encode_event, Kind, Power, PowerSource};
 use guardian_protocol::identity::{ChannelKey, Context, DeviceId, RootSecret};
-use guardian_protocol::time::UtcTime;
 
 use super::{say, Bringup};
 use crate::error::{Error, Result};
@@ -80,7 +79,7 @@ impl<M: Modem + Uplink, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P,
             .modem
             .network_time()
             .inspect_err(|e| say!(self, "network time unavailable: {e}"))?;
-        let sequence = self.reserve_sequence(now)?;
+        let sequence = self.reserve_sequence()?;
         let reserve = self
             .platform
             .battery_mv()
@@ -117,12 +116,12 @@ impl<M: Modem + Uplink, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P,
 
 impl<M: Modem + Uplink, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P, W> {
     /// Pick the next sequence and record it durably before it is used.
-    fn reserve_sequence(&mut self, now: UtcTime) -> Result<u32> {
+    fn reserve_sequence(&mut self) -> Result<u32> {
         let last = self
             .platform
             .last_sequence()
             .inspect_err(|e| say!(self, "sequence storage unreadable: {e}"))?;
-        let next = next_sequence(last, now).inspect_err(|_| say!(self, "sequence exhausted"))?;
+        let next = next_sequence(last).inspect_err(|_| say!(self, "sequence exhausted"))?;
         self.platform
             .store_sequence(next)
             .inspect_err(|e| say!(self, "sequence not stored, not sending: {e}"))?;
@@ -130,17 +129,15 @@ impl<M: Modem + Uplink, S: MotionSensor, P: Platform, W: Write> Bringup<M, S, P,
     }
 }
 
-/// One above the last recorded sequence. A device that never sent seeds
-/// from the UTC seconds: always above anything a previous firmware (or the
-/// time-based bench scheme) could have used for this id, while leaving
-/// ~350 million events before the backend's `2^31` limit.
+/// One above the last recorded sequence. A new identity starts at one; time is
+/// deliberately excluded from the anti-replay counter.
 ///
 /// # Errors
-/// [`Error::State`] once the limit is reached or the clock is unusable.
-pub fn next_sequence(last: Option<u32>, now: UtcTime) -> Result<u32> {
+/// [`Error::State`] once the limit is reached.
+pub fn next_sequence(last: Option<u32>) -> Result<u32> {
     let next = match last {
         Some(last) => last.checked_add(1),
-        None => u32::try_from(now.unix()).ok(),
+        None => Some(1),
     };
     next.filter(|&s| s > 0 && s < guardian_protocol::envelope::SEQUENCE_LIMIT)
         .ok_or(Error::State)
