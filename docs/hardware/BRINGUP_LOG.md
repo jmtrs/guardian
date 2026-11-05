@@ -310,12 +310,16 @@ cables al INA219), **salió humo de la zona de potencia**. La celda estaba fría
 | GND de la placa ↔ contacto − del portapilas | **193 mV** a ~48 mA (sano: unos mV). El defecto está en ese tramo |
 | Inspección | El chip de 6 patas de la protección (**U8**, marcado `DW06D`/`DW060`) tiene el recubrimiento saltado |
 
-Lectura: uno de los MOSFET integrados de U8 quedó dañado a medias (~4 Ω). Con
-~285 mA de carga disipaba ~0,3 W y humeó. Causa más probable: desgaste
-acumulado. Los "cortes de batería" de la mañana (0,48 V, placa apagada sin
-tocar nada) eran casi seguro disparos de U8 ante picos, más los transitorios de
-conectar y desconectar cables con la batería puesta. El firmware no controla ni
-el cargador ni la protección. No se descarta una pieza débil de fábrica.
+Lectura: **U8 se dañó durante el uso de hoy, no venía así.** Por la mañana
+estaba sana: con la celda en el portapilas caían solo 9 mV a 47 mA, y el
+recubrimiento estaba intacto. Uno de sus MOSFET integrados quedó dañado a
+medias (~4 Ω); con ~285 mA de carga disipaba ~0,3 W y humeó.
+
+Causa más probable: el uso de la protección en el banco. Los "cortes de
+batería" de la mañana (0,48 V, placa apagada sin tocar nada) eran casi seguro
+disparos de U8 ante picos, a los que se suman los transitorios de conectar y
+desconectar cables con la batería puesta y los muchos ciclos de encendido del
+módem. El firmware no controla ni el cargador ni la protección.
 
 Estado: la placa funciona **con USB y sin batería** (U8 no está en ese camino).
 **No usar con batería ni cargar** hasta sustituir U8 (DW06D, SOT-23-6).
