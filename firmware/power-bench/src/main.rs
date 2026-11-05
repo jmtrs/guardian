@@ -17,6 +17,7 @@ use esp_idf_svc::hal::delay::FreeRtos;
 use esp_idf_svc::hal::gpio::AnyIOPin;
 use esp_idf_svc::hal::i2c::{I2cConfig, I2cDriver};
 use esp_idf_svc::hal::peripherals::Peripherals;
+use esp_idf_svc::hal::reset::ResetReason;
 use esp_idf_svc::hal::uart::{config::Config as UartConfig, UartDriver};
 use esp_idf_svc::hal::units::Hertz;
 use esp_idf_svc::hal::usb_serial::{config::Config as UsbConfig, UsbSerialDriver};
@@ -72,6 +73,15 @@ fn main() -> Result<(), EspError> {
         &UsbConfig::new(),
     )?;
     let mut link = Link::new(Host::new(usb), device);
+    // A restart mid-measurement loses the totals: make it impossible to miss.
+    let reset = ResetReason::get();
+    if !matches!(
+        reset,
+        ResetReason::PowerOn | ResetReason::ExternalPin | ResetReason::USBPeripheral
+    ) {
+        link.host()
+            .line(format_args!("bench: RESTARTED ({reset:?}), totals lost"));
+    }
 
     while let Err(e) = meter.probe() {
         link.host().line(format_args!(
